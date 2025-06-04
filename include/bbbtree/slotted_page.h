@@ -26,6 +26,8 @@ namespace bbbtree
     };
 
     /// @brief A SlottedPage contains Records identified through Tuple IDs (`TID`).
+    /// Slots grow from the front of the page, after the heading. Data grow from the end.
+    /// The page is full when slots and data meets.
     /// Does not handle redirect tuples. No deletions, compactification & relocation for now. Append-Only.
     struct SlottedPage
     {
@@ -36,7 +38,7 @@ namespace bbbtree
 
             /// Number of currently used slots. Indicates the next free slot due to append-only design.
             uint16_t slot_count;
-            /// Lower end of the data.
+            /// Upper end of the data. Where new data can be prepended.
             uint32_t data_start;
         };
 
@@ -85,10 +87,13 @@ namespace bbbtree
         /// Get constant slots.
         [[nodiscard]] const Slot *get_slots() const { return reinterpret_cast<const SlottedPage::Slot *>(get_data() + sizeof(SlottedPage)); }
 
-        // Allocate a slot.
+        /// Get free space.
+        size_t get_free_space() { return header.data_start - sizeof(SlottedPage) - header.slot_count * sizeof(Slot); };
+
+        // Allocate a slot. Throws if not enough space left on page.
         /// @param[in] data_size    The slot that should be allocated.
         /// @param[in] page_size    The new size of a slot.
-        /// @return                 The slot ID.
+        /// @return                 The new slot's ID.
         TID::SlotID allocate(uint32_t data_size, uint32_t page_size);
 
         /// Erase a slot.
