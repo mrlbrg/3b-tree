@@ -96,7 +96,7 @@ namespace bbbtree
         /// @return                 The new slot's ID.
         TID::SlotID allocate(uint32_t data_size, uint32_t page_size);
 
-        /// Erase a slot.
+        /// Erase a slot. Throws if `slot_id` invalid.
         /// @param[in] slot_id      The slot that should be erased
         void erase(uint16_t slot_id);
 

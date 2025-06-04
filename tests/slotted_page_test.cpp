@@ -23,7 +23,7 @@ TEST(SlottedPage, Constructor)
 }
 
 /// Slotted Page throws an error when full.
-TEST(SlottedPage, Overflow)
+TEST(SlottedPage, PageFull)
 {
 
     static constexpr uint32_t page_size = 1024;
@@ -40,7 +40,6 @@ TEST(SlottedPage, Overflow)
 /// Slotted Page allocates space.
 TEST(SlottedPage, Allocate)
 {
-
     static constexpr uint32_t page_size = 1024;
     std::vector<std::byte> buffer;
     buffer.resize(page_size);
@@ -59,4 +58,29 @@ TEST(SlottedPage, Allocate)
 
     /// Allocating one more should throw, because the page is full.
     EXPECT_THROW(page->allocate(1, page_size), std::logic_error);
+}
+
+/// Slotted Page erases space.
+TEST(SlottedPage, Erase)
+{
+    static constexpr uint32_t page_size = 1024;
+    std::vector<std::byte> buffer;
+    buffer.resize(page_size);
+    auto *page = new (&buffer[0]) bbbtree::SlottedPage(page_size);
+
+    // Allocate
+    auto slot_id = page->allocate(1, 1024);
+    EXPECT_EQ(page->header.slot_count, 1);
+    page->allocate(1, 1024);
+    EXPECT_EQ(page->header.slot_count, 2);
+    page->allocate(1, 1024);
+    EXPECT_EQ(page->header.slot_count, 3);
+
+    // Erase
+    page->erase(slot_id);
+    EXPECT_EQ(page->header.slot_count, 3);
+
+    // Erase non-existing slot ID
+    EXPECT_THROW(page->erase(52345), std::logic_error);
+    EXPECT_EQ(page->header.slot_count, 3);
 }

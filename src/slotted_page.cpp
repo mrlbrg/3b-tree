@@ -37,3 +37,11 @@ TID::SlotID SlottedPage::allocate(uint32_t data_size, uint32_t page_size)
 
     return slot_id;
 }
+
+void SlottedPage::erase(uint16_t slot_id)
+{
+    if (header.slot_count <= slot_id)
+        throw std::logic_error("SlottedPage::erase(): Slot ID not valid");
+    auto *slot = get_slots() + slot_id;
+    slot->clear();
+}
