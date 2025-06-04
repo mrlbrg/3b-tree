@@ -71,19 +71,19 @@ namespace bbbtree
             uint64_t value{0};
         };
 
-        /// Constructor.
-        /// @param[in] page_size    The size of a buffer frame.
+        /// Constructor. Initializes the header and sets the rest to zero.
+        /// @param[in] page_size    The size of the page.
         explicit SlottedPage(uint32_t page_size);
 
         /// Get data.
-        std::byte *get_data();
+        std::byte *get_data() { return reinterpret_cast<std::byte *>(this); }
         /// Get constant data.
-        [[nodiscard]] const std::byte *get_data() const;
+        [[nodiscard]] const std::byte *get_data() const { return reinterpret_cast<const std::byte *>(this); }
 
         /// Get slots.
-        Slot *get_slots();
+        Slot *get_slots() { return reinterpret_cast<SlottedPage::Slot *>(get_data() + sizeof(SlottedPage)); }
         /// Get constant slots.
-        [[nodiscard]] const Slot *get_slots() const;
+        [[nodiscard]] const Slot *get_slots() const { return reinterpret_cast<const SlottedPage::Slot *>(get_data() + sizeof(SlottedPage)); }
 
         // Allocate a slot.
         /// @param[in] data_size    The slot that should be allocated.
