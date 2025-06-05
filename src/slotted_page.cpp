@@ -3,8 +3,7 @@
 #include <cstring>
 #include <stdexcept>
 
-using bbbtree::SlottedPage;
-using bbbtree::TID;
+using namespace bbbtree;
 
 SlottedPage::Header::Header(uint32_t page_size)
     : slot_count(0),
@@ -17,7 +16,7 @@ SlottedPage::SlottedPage(uint32_t page_size)
     std::memset(get_data() + sizeof(SlottedPage), 0x00, page_size - sizeof(SlottedPage));
 }
 
-TID::SlotID SlottedPage::allocate(uint32_t data_size, uint32_t page_size)
+SlotID SlottedPage::allocate(uint32_t data_size, uint32_t page_size)
 {
     // Pre-requisite: Caller must ensure that there is enough space on this page to allocate, will throw otherwise
 

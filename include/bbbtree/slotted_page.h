@@ -1,30 +1,11 @@
 #ifndef INCLUDE_BBBTREE_SLOTTEDPAGE_H_
 #define INCLUDE_BBBTREE_SLOTTEDPAGE_H_
 
-#include <cstdint>
+#include "bbbtree/tuple_id.h"
 #include <cstddef>
 
 namespace bbbtree
 {
-    /// @brief A TID consists of page ID (48 bit) | slot ID (16 bit).
-    struct TID
-    {
-        using PageID = uint64_t;
-        using SlotID = uint16_t;
-
-        /// Constructor.
-        TID(PageID page_id, SlotID slot_id) : value((page_id << 16) ^ (slot_id & 0xFFFF)) {}
-
-        /// Get the page ID.
-        [[nodiscard]] PageID get_page_id() const { return value >> 16; }
-        /// Get the slot ID.
-        [[nodiscard]] SlotID get_slot_id() const { return value & 0xFFFF; }
-
-    private:
-        /// The TID value.
-        uint64_t value;
-    };
-
     /// @brief A SlottedPage contains Records identified through Tuple IDs (`TID`).
     /// Slots grow from the front of the page, after the heading. Data grow from the end.
     /// The page is full when slots and data meets.
@@ -94,11 +75,11 @@ namespace bbbtree
         /// @param[in] data_size    The slot that should be allocated.
         /// @param[in] page_size    The new size of a slot.
         /// @return                 The new slot's ID.
-        TID::SlotID allocate(uint32_t data_size, uint32_t page_size);
+        SlotID allocate(uint32_t data_size, uint32_t page_size);
 
         /// Erase a slot. Throws if `slot_id` invalid.
         /// @param[in] slot_id      The slot that should be erased
-        void erase(uint16_t slot_id);
+        void erase(SlotID slot_id);
 
         /// The header.
         /// DO NOT allocate heap objects for a slotted page but instead reinterpret_cast BufferFrame.get_data()!

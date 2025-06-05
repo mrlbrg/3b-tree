@@ -8,5 +8,11 @@
 
 set(
     INCLUDE_H
+    include/bbbtree/database.h
+    include/bbbtree/segment.h 
+    include/bbbtree/buffer_manager.h 
     include/bbbtree/slotted_page.h
+    include/bbbtree/tuple_id.h 
+    include/bbbtree/file.h 
+    include/bbbtree/types.h
 )
