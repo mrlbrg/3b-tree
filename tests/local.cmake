@@ -8,6 +8,8 @@
 
 set(TEST_CC
     tests/slotted_page_test.cpp
+    tests/buffer_manager_test.cpp
+    tests/segment_test.cpp
 )
 
 # ---------------------------------------------------------------------------
