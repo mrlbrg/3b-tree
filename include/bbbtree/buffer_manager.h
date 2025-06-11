@@ -29,7 +29,7 @@ namespace bbbtree
         State state = State::UNDEFINED;
 
         /// Loads a page into the frame.
-        void load_page(PageID page_id, size_t page_size);
+        void load_page(SegmentID segmentID, PageID page_id, size_t page_size);
 
         friend class BufferManager;
 
@@ -77,8 +77,9 @@ namespace bbbtree
         /// Move Assignment.
         BufferManager &operator=(BufferManager &&) = delete;
 
-        /// Get a page from the buffer by page ID.
-        BufferFrame &fix_page(PageID page_id, bool exclusive);
+        /// Get a page from the buffer by page ID and segment ID.
+        /// Expects a pure page ID, not a tuple ID (TID).
+        BufferFrame &fix_page(SegmentID segment_id, PageID page_id, bool exclusive);
 
         /// Releases a page. If dirty, its written to disk eventually.
         void unfix_page(BufferFrame &frame, bool is_dirty);

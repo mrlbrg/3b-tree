@@ -6,7 +6,6 @@
 
 namespace bbbtree
 {
-
     ///
     /// Block-wise file API for C++.
     ///

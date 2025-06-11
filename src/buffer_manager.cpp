@@ -6,8 +6,9 @@
 namespace bbbtree
 {
     // -----------------------------------------------------------------
-    void BufferFrame::load_page(PageID page_id, size_t page_size)
+    void BufferFrame::load_page(SegmentID SegmentID, PageID page_id, size_t page_size)
     {
+        // TODO: Do we need to store SegmentID on the page as well?
         this->page_id = page_id;
         this->state = State::CLEAN;
         // TODO: actually load data from file.
@@ -36,17 +37,18 @@ namespace bbbtree
         // TODO: Write out all dirty pages.
     }
     // -----------------------------------------------------------------
-    BufferFrame &BufferManager::fix_page(PageID page_id, bool exclusive)
+    BufferFrame &BufferManager::fix_page(SegmentID segment_id, PageID page_id, bool exclusive)
     {
-        auto frame_it = id_to_frame.find(page_id);
+        auto segment_page_id = page_id ^ (static_cast<uint64_t>(segment_id) << 48);
+        auto frame_it = id_to_frame.find(segment_page_id);
         // Page already buffered?
         if (frame_it != id_to_frame.end())
             return *(frame_it->second);
 
         // Load page into buffer
         auto &frame = get_free_frame();
-        id_to_frame[page_id] = &frame;
-        frame.load_page(page_id, page_size);
+        id_to_frame[segment_page_id] = &frame;
+        frame.load_page(segment_id, page_id, page_size);
 
         return frame;
     }

@@ -15,7 +15,7 @@ namespace
 
         // Write to page
         {
-            auto &page = buffer_manager.fix_page(1, true);
+            auto &page = buffer_manager.fix_page(348, 1, true);
             ASSERT_TRUE(page.get_data());
             std::memcpy(page.get_data(), expected_values.data(), page_size);
             buffer_manager.unfix_page(page, true);
@@ -23,7 +23,7 @@ namespace
         // Read from page
         {
             std::vector<uint64_t> values(page_size / sizeof(uint64_t));
-            auto &page = buffer_manager.fix_page(1, false);
+            auto &page = buffer_manager.fix_page(348, 1, false);
             std::memcpy(values.data(), page.get_data(), page_size);
             buffer_manager.unfix_page(page, true);
             ASSERT_EQ(expected_values, values);
@@ -35,9 +35,11 @@ namespace
         size_t page_size = 1024;
         bbbtree::BufferManager buffer_manager{page_size, 1};
 
-        auto &page = buffer_manager.fix_page(1, true);
-        EXPECT_THROW(buffer_manager.fix_page(2, true), bbbtree::buffer_full_error);
+        auto &page = buffer_manager.fix_page(348, 1, true);
+        EXPECT_THROW(buffer_manager.fix_page(348, 2, true), bbbtree::buffer_full_error);
+        buffer_manager.unfix_page(page, false);
     }
+    // TODO: Fill in tests.
     /// A page can be fixed exclusively. Someone else cannot fix that page.
     TEST(BufferManager, ExclusiveFlag) {}
     /// A page does not loose state on eviction.

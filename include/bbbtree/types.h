@@ -5,6 +5,7 @@
 
 namespace bbbtree
 {
+    using SegmentID = uint16_t;
     using PageID = uint64_t;
     using SlotID = uint16_t;
 }

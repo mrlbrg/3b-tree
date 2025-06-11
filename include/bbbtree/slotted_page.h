@@ -9,7 +9,7 @@ namespace bbbtree
     /// @brief A SlottedPage contains Records identified through Tuple IDs (`TID`).
     /// Slots grow from the front of the page, after the heading. Data grow from the end.
     /// The page is full when slots and data meets.
-    /// Does not handle redirect tuples. No deletions, compactification & relocation for now. Append-Only.
+    /// TODO: Does not handle redirect tuples. No deletions, compactification & relocation for now. Append-Only.
     struct SlottedPage
     {
         struct Header
@@ -70,6 +70,8 @@ namespace bbbtree
 
         /// Get free space.
         size_t get_free_space() { return header.data_start - sizeof(SlottedPage) - header.slot_count * sizeof(Slot); };
+
+        static size_t get_initial_free_space(uint32_t page_size) { return page_size - sizeof(SlottedPage); }
 
         // Allocate a slot. Throws if not enough space left on page.
         /// @param[in] data_size    The slot that should be allocated.
