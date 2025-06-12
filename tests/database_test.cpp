@@ -11,10 +11,10 @@ using namespace bbbtree;
 
 namespace
 {
-    // A tuple inserted can be read again.
-    TEST(Database, InsertRead)
+    // A tuple inserted can be read again when all data fits in memory buffer.
+    TEST(Database, InMemory)
     {
-        const size_t numTuples = 1000;
+        const size_t numTuples = 200;
         std::vector<Tuple> tuples;
         std::unordered_map<Tuple::Key, Tuple> expectedMap;
 
@@ -53,8 +53,11 @@ namespace
             EXPECT_EQ(expectedTuple, actual);
         }
     }
-
-    // A tuple inserted can be read again after destroying the database.
+    // A tuple can be inserted and read again, also if data exceeds buffer size.
+    TEST(Database, OutOfMemory)
+    {
+    }
+    // A tuple inserted can be read again, also after destroying the database.
     TEST(Database, Persistency)
     {
     }
