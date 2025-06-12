@@ -8,6 +8,8 @@
 #include <vector>
 #include <cstdint>
 
+// TODO: Rethink `logic_errors` and which error makes more sense to throw.
+
 namespace bbbtree
 {
     static const constexpr size_t PAGE_SIZE = 1024;
@@ -15,23 +17,36 @@ namespace bbbtree
     static const constexpr SegmentID FSI_SEGMENT_ID = 0;
     static const constexpr SegmentID SP_SEGMENT_ID = 1;
 
-    /// A Database maintains a single table of keys and values. The schema is fixated at compile-time.
-    class Database
+    /// A Tuple with key and value that are stored in the database.
+    struct Tuple
     {
         using Key = uint64_t;
         using Value = uint64_t;
-        using Tuple = std::pair<Key, Value>;
 
+        Key key;
+        Value value;
+
+        /// Equality operator.
+        bool operator==(const Tuple &other) const { return key == other.key && value == other.value; }
+    };
+
+    /// A Database maintains a single table of keys and values. The schema is fixated at compile-time.
+    class Database
+    {
     public:
         /// Constructor.
-        Database() : buffer_manager(PAGE_SIZE, NUM_PAGES), space_inventory(FSI_SEGMENT_ID, buffer_manager), slotted_pages(SP_SEGMENT_ID, buffer_manager, space_inventory) {}
+        Database() : buffer_manager(PAGE_SIZE, NUM_PAGES), space_inventory(FSI_SEGMENT_ID, buffer_manager), records(SP_SEGMENT_ID, buffer_manager, space_inventory) {}
 
-        /// Inserts into the database.
-        void insert(const std::vector<Tuple> tuples);
-        /// Reads a tuple by TID from the database.
-        Tuple get(TID tid);
-        /// Deletes a tuple by TID from the database.
-        void erase(TID tid);
+        /// Inserts a tuple into the database.
+        void insert(Tuple &tuple);
+        /// Inserts tuples into the database.
+        /// Tuple keys must not be already present in database.
+        void insert(std::vector<Tuple> tuples);
+        /// Reads a value by key from the database.
+        Tuple get(Tuple::Key key);
+        /// Deletes a tuple by key from the database.
+        void erase(Tuple::Key key);
+        /// Updates a tuple by key. Key must already be present in database.
 
     private:
         /// The buffer manager.
@@ -39,7 +54,10 @@ namespace bbbtree
         /// The Free-Space-Inventory segment.
         FSISegment space_inventory;
         /// The Slotted Pages segment.
-        SPSegment slotted_pages;
+        SPSegment records;
+        /// The access path. Maps keys to their tuple IDs.
+        /// TODO: Template the database on the index.
+        std::unordered_map<Tuple::Key, TID> index;
     };
 }
 

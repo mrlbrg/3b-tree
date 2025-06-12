@@ -19,12 +19,15 @@ namespace bbbtree
     {
         // Allocate memory for Pages
         page_data.resize(page_count * page_size);
+        // Reserve memory for Buffer Frames
+        page_frames.reserve(page_count);
+        // Reserve memory for free Buffer Frame pointers
+        free_buffer_frames.reserve(page_count);
         // Reserve memory in HT
         id_to_frame.reserve(page_count);
-        // Reserve memory for free Buffer Frames
-        free_buffer_frames.reserve(page_count);
+
         // Create Buffer Frames and
-        // Assign a constant Buffer ptr to each Buffer Frame
+        // assign a constant Buffer ptr to each Buffer Frame
         for (auto data = page_data.begin(); data < page_data.end(); data += page_size)
         {
             page_frames.emplace_back(&(*data));

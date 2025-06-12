@@ -89,7 +89,7 @@ namespace bbbtree
         return bytes_read;
     }
 
-    uint32_t SPSegment::write(TID tid, std::byte *record, uint32_t record_size)
+    uint32_t SPSegment::write(TID tid, const std::byte *record, uint32_t record_size)
     {
         // Get Slot
         auto &frame = buffer_manager.fix_page(segment_id, tid.get_page_id(), false);

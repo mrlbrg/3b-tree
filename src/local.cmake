@@ -8,9 +8,10 @@
 
 set(
     SRC_CC
-    src/slotted_page.cpp
+    src/database.cpp
     src/buffer_manager.cpp
     src/segment.cpp
+    src/slotted_page.cpp
 )
 if(UNIX)
     set(SRC_CC ${SRC_CC} src/file/posix_file.cc)

@@ -65,7 +65,7 @@ namespace bbbtree
       uint32_t read(TID tid, std::byte *record, uint32_t capacity) const;
       /// Writes a tuple into the given tuple id.
       /// Only allows writes of the exact size allocated for this tuple id.
-      uint32_t write(TID tid, std::byte *record, uint32_t record_size);
+      uint32_t write(TID tid, const std::byte *record, uint32_t record_size);
       /// TODO: Resizes a tuple.
       void resize(TID tid, uint32_t new_length);
       /// TODO: Erases a tuple from the slotted page.
