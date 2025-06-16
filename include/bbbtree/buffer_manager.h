@@ -2,7 +2,9 @@
 #define INCLUDE_BBBTREE_BUFFER_MANAGER_H_
 
 #include "bbbtree/types.h"
+#include "bbbtree/file.h"
 
+#include <map>
 #include <unordered_map>
 #include <vector>
 #include <exception>
@@ -11,15 +13,17 @@ namespace bbbtree
 {
     enum class State
     {
-        UNDEFINED,
-        CLEAN,
-        DIRTY
+        UNDEFINED, // Not owning a particular page.
+        CLEAN,     // Owns an unchanged page.
+        DIRTY      // Owns a changed page or a new page.
     };
 
     class BufferFrame
     {
     private:
-        /// The page's ID.
+        /// The segment's ID.
+        SegmentID segment_id;
+        /// The page's ID within its segment.
         PageID page_id;
         /// The data of the page this frame maintains.
         /// The pointer remains constant.
@@ -27,9 +31,8 @@ namespace bbbtree
         char *const data;
         /// The state of the page. Undefined by default.
         State state = State::UNDEFINED;
-
-        /// Loads a page into the frame.
-        void load_page(SegmentID segmentID, PageID page_id, size_t page_size);
+        /// Whether the page is currently fixed.
+        bool in_use = false;
 
         friend class BufferManager;
 
@@ -89,6 +92,21 @@ namespace bbbtree
     private:
         /// Gets a free buffer frame. Evicts another page when buffer is full.
         BufferFrame &get_free_frame();
+        /// Evicts a page from the buffer. Assumes that no frame is free. Returns if a page was evicte successfully.
+        /// Eviction could fail e.g. when all pages are currently fixed.
+        bool evict();
+        /// Write a page to disk.
+        void write();
+
+        /// Get the segment's file from a segment ID.
+        /// Opens/creates the file if not present yet.
+        File &get_segment(SegmentID segment_id);
+        /// Loads a page into a frame.
+        void load(BufferFrame &frame, SegmentID segment_id, PageID page_id);
+        /// Unloads a frame's page do disk.
+        void unload(BufferFrame &frame);
+        /// Resets a frame.
+        inline void reset(BufferFrame &frame);
 
         /// The size of each page in the buffer.
         size_t page_size;
@@ -96,10 +114,12 @@ namespace bbbtree
         std::vector<char> page_data;
         /// The pages' frames.
         std::vector<BufferFrame> page_frames;
-        /// The map from page IDs to the corrensponding pages.
+        /// Maps page IDs (including segment ID) to the corrensponding pages.
         std::unordered_map<PageID, BufferFrame *> id_to_frame;
-        // Tracks pointers to unused BufferFrames
+        // Tracks pointers to unused BufferFrames.
         std::vector<BufferFrame *> free_buffer_frames;
+        // Maps a Segment to its corresponding file. We use a `map` for pointer stability.
+        std::map<SegmentID, std::unique_ptr<File>> segment_to_file;
     };
 }
 #endif // INCLUDE_BBBTREE_BUFFER_MANAGER_H_

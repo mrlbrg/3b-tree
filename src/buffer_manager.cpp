@@ -2,21 +2,62 @@
 #include "bbbtree/buffer_manager.h"
 // -----------------------------------------------------------------
 #include <cstring>
+#include <cassert>
+#include <cstdlib>
 // -----------------------------------------------------------------
 namespace bbbtree
 {
-    // -----------------------------------------------------------------
-    void BufferFrame::load_page(SegmentID SegmentID, PageID page_id, size_t page_size)
+    // ----------------------------------------------------------------
+    void BufferManager::reset(BufferFrame &frame)
     {
-        // TODO: Do we need to store SegmentID on the page as well?
-        this->page_id = page_id;
-        this->state = State::CLEAN;
-        // TODO: actually load data from file.
-        std::memset(data, 0x00, page_size);
+        frame.state = State::UNDEFINED;
+        assert(frame.in_use == false);
+    }
+    // ----------------------------------------------------------------
+    void BufferManager::unload(BufferFrame &frame)
+    {
+        switch (frame.state)
+        {
+        case State::UNDEFINED:
+        case State::CLEAN:
+        case State::DIRTY:
+            size_t page_begin = frame.page_id * page_size;
+            size_t page_end = page_begin + page_size;
+            auto &file = get_segment(frame.segment_id);
+            file.resize(page_end);
+            // TODO: Make sure everything was written out.
+            file.write_block(frame.data, page_begin, page_size);
+        }
+    }
+    // -----------------------------------------------------------------
+    void BufferManager::load(BufferFrame &frame, SegmentID segment_id, PageID page_id)
+    {
+        frame.segment_id = segment_id;
+        frame.page_id = page_id;
+        frame.state = State::CLEAN;
+
+        size_t page_begin = page_id * page_size;
+        size_t page_end = page_begin + page_size;
+
+        // Page is new. Resize file on write out.
+        auto &file = get_segment(segment_id);
+        if (file.size() < page_end)
+        {
+            // Set the page to dirty to make sure its written to disk later.
+            frame.state = State::DIRTY;
+            return;
+        }
+
+        // TODO: Throw an error when not enough was read/written.
+        file.read_block(page_begin, page_size, frame.data);
     }
     // -----------------------------------------------------------------
     BufferManager::BufferManager(size_t page_size, size_t page_count) : page_size(page_size)
     {
+        // Sanity checks
+        assert(page_count > 0);
+        assert(page_size > 0);
+
         // Allocate memory for Pages
         page_data.resize(page_count * page_size);
         // Reserve memory for Buffer Frames
@@ -37,7 +78,12 @@ namespace bbbtree
     // -----------------------------------------------------------------
     BufferManager::~BufferManager()
     {
-        // TODO: Write out all dirty pages.
+        for (auto &frame : page_frames)
+        {
+            // TODO: Must also be written when page is new.
+            if (frame.state == State::DIRTY)
+                unload(frame);
+        }
     }
     // -----------------------------------------------------------------
     BufferFrame &BufferManager::fix_page(SegmentID segment_id, PageID page_id, bool exclusive)
@@ -46,34 +92,98 @@ namespace bbbtree
         auto frame_it = id_to_frame.find(segment_page_id);
         // Page already buffered?
         if (frame_it != id_to_frame.end())
+        {
+            auto &frame = frame_it->second;
+            frame->in_use = true;
             return *(frame_it->second);
+        }
 
         // Load page into buffer
         auto &frame = get_free_frame();
         id_to_frame[segment_page_id] = &frame;
-        frame.load_page(segment_id, page_id, page_size);
+        load(frame, segment_id, page_id);
+        frame.in_use = true;
 
         return frame;
     }
     // -----------------------------------------------------------------
     void BufferManager::unfix_page(BufferFrame &frame, bool is_dirty)
     {
+        // Sanity check
+        assert(frame.in_use);
+
         if (is_dirty)
             frame.state = State::DIRTY;
+        frame.in_use = false;
+    }
+    // ----------------------------------------------------------------
+    bool BufferManager::evict()
+    {
+        // Select random page for eviction.
+        int i = std::rand() % page_frames.size();
+        auto *frame = &(page_frames[i]);
+        uint8_t num_frames_tested = 0;
+
+        // Find a page that is not in use from there.
+        while (frame->in_use)
+        {
+            // Stop when having scanned all frames already.
+            ++num_frames_tested;
+            if (num_frames_tested == page_frames.size())
+                return false;
+
+            // Otherwise try next page.
+            i = (i + 1) % page_frames.size();
+            frame = &(page_frames[i]);
+        }
+
+        // TODO: Must also be written when page is new.
+        // Write dirty pages out.
+        if (frame->state == State::DIRTY)
+            unload(*frame);
+
+        // Free the frame from ownership.
+        assert(frame->in_use == false);
+        frame->state = State::UNDEFINED;
+        free_buffer_frames.emplace_back(frame);
+
+        return true;
     }
     // ----------------------------------------------------------------
     BufferFrame &BufferManager::get_free_frame()
     {
-        // Buffer not full yet
-        if (!free_buffer_frames.empty())
+        // TODO: Synchronize when multi-threading.
+
+        // Buffer full?
+        if (free_buffer_frames.empty())
         {
-            auto &frame = *(free_buffer_frames.back());
-            free_buffer_frames.pop_back();
-            return frame;
+            auto success = evict();
+            if (!success)
+                throw buffer_full_error();
         }
 
-        // TODO: Evict a random page when buffer is full.
-        throw buffer_full_error();
+        // Sanity check
+        assert(!free_buffer_frames.empty());
+
+        auto &frame = *(free_buffer_frames.back());
+        free_buffer_frames.pop_back();
+
+        return frame;
+    }
+    // ------------------------------------------------------------------
+    File &BufferManager::get_segment(SegmentID segment_id)
+    {
+        auto it = segment_to_file.find(segment_id);
+
+        // File open.
+        if (it != segment_to_file.end())
+            return *(it->second);
+
+        // Open/create file if not present yet.
+        auto file_name = std::to_string(segment_id);
+        auto [new_it, success] = segment_to_file.emplace(segment_id, File::open_file(file_name.data(), File::Mode::WRITE));
+
+        return *(new_it->second);
     }
     // ------------------------------------------------------------------
 } // namespace bbbtree

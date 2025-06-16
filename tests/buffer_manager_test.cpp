@@ -36,8 +36,13 @@ namespace
         bbbtree::BufferManager buffer_manager{page_size, 1};
 
         auto &page = buffer_manager.fix_page(348, 1, true);
+
+        // Cannot evict a page when its fixed.
         EXPECT_THROW(buffer_manager.fix_page(348, 2, true), bbbtree::buffer_full_error);
+
+        // Can evict a page when its not fixed.
         buffer_manager.unfix_page(page, false);
+        EXPECT_NO_THROW(buffer_manager.fix_page(248, 2, true));
     }
     // TODO: Fill in tests.
     /// A page can be fixed exclusively. Someone else cannot fix that page.

@@ -6,66 +6,126 @@
 #include <random>
 #include <cstdint>
 #include <algorithm>
+#include <memory>
+#include <utility>
 
 using namespace bbbtree;
 
 namespace
 {
-    // A tuple inserted can be read again when all data fits in memory buffer.
-    TEST(Database, InMemory)
+    static const constexpr size_t TEST_PAGE_SIZE = 1024;
+    static const constexpr size_t TEST_NUM_PAGES = 3;
+
+    class DatabaseTest : public ::testing::Test
     {
-        const size_t numTuples = 200;
-        std::vector<Tuple> tuples;
-        std::unordered_map<Tuple::Key, Tuple> expectedMap;
-
-        std::mt19937_64 rng(42); // Fixed seed for reproducibility
-        std::uniform_int_distribution<uint64_t> dist;
-
-        // Generate random tuples with unique keys
-        while (expectedMap.size() < numTuples)
+    protected:
+        void RestructDB()
         {
-            Tuple::Key key = dist(rng);
-            uint64_t value = dist(rng);
+            db_ = std::make_unique<Database>(TEST_PAGE_SIZE, TEST_NUM_PAGES);
+        }
 
-            if (expectedMap.count(key) == 0)
+        // Runs *before* each TEST_F
+        void SetUp() override
+        {
+            RestructDB();
+        }
+
+        // Runs *after* each TEST_F
+        void TearDown() override
+        {
+            // TODO: Deletes created files.
+        }
+
+        std::unordered_map<Tuple::Key, Tuple> SeedDB(size_t num_tuples)
+        {
+            std::vector<Tuple> tuples;
+            std::unordered_map<Tuple::Key, Tuple> expected_map;
+
+            std::mt19937_64 rng(42); // Fixed seed for reproducibility
+            std::uniform_int_distribution<uint64_t> dist;
+
+            // Generate random tuples with unique keys
+            while (expected_map.size() < num_tuples)
             {
-                Tuple t{key, value};
-                tuples.push_back(t);
-                expectedMap[key] = t;
+                Tuple::Key key = dist(rng);
+                uint64_t value = dist(rng);
+
+                if (expected_map.count(key) == 0)
+                {
+                    Tuple t{key, value};
+                    tuples.push_back(t);
+                    expected_map[key] = t;
+                }
             }
+
+            // Insert into the database
+            db_->insert(tuples);
+
+            return expected_map;
         }
 
-        // Convert to vector<const Tuple>
-        std::vector<Tuple> constTuples;
-        for (auto &t : tuples)
-        {
-            constTuples.push_back(t);
-        }
+        /// The database under test. When changing these parameters, also change the test's parameters,
+        /// e.g. when testing in or out of memory behavior.
+        std::unique_ptr<Database> db_;
+    };
 
-        // Insert into the database
-        Database db;
-        db.insert(constTuples);
+    // A tuple inserted can be read again when all data fits in memory buffer.
+    TEST_F(DatabaseTest, InMemory)
+    {
+        // Calculate the number of tuples that fit into the buffer.
+        const size_t num_tuples = TEST_PAGE_SIZE * TEST_NUM_PAGES / sizeof(Tuple) / 2;
+
+        auto expected_map = SeedDB(num_tuples);
+        EXPECT_EQ(db_->size(), expected_map.size());
 
         // Verify correctness
-        for (const auto &[key, expectedTuple] : expectedMap)
+        for (const auto &[key, expectedTuple] : expected_map)
         {
-            Tuple actual = db.get(key);
+            Tuple actual = db_->get(key);
             EXPECT_EQ(expectedTuple, actual);
         }
     }
-    TEST(Database, DuplicateKeys)
+
+    // The same key can only be inserted once.
+    TEST_F(DatabaseTest, DuplicateKeys)
     {
-        Database db;
-        db.insert({Tuple{0, 1}});
-        EXPECT_THROW(db.insert({Tuple{0, 2}}), std::logic_error);
+        EXPECT_NO_THROW(db_->insert({Tuple{0, 1}}));
+        EXPECT_THROW(db_->insert({Tuple{0, 2}}), std::logic_error);
     }
     // A tuple can be inserted and read again, also if data exceeds buffer size.
-    TEST(Database, OutOfMemory)
+    TEST_F(DatabaseTest, OutOfMemory)
     {
+        // Calculate the number of tuples that overflow  the buffer.
+        const size_t num_tuples = TEST_PAGE_SIZE * TEST_NUM_PAGES / sizeof(Tuple) * 2;
+
+        auto expected_map = SeedDB(num_tuples);
+        EXPECT_EQ(db_->size(), expected_map.size());
+
+        // Verify correctness
+        for (const auto &[key, expectedTuple] : expected_map)
+        {
+            Tuple actual = db_->get(key);
+            EXPECT_EQ(expectedTuple, actual);
+        }
     }
     // A tuple inserted can be read again, also after destroying the database.
-    TEST(Database, Persistency)
+    TEST_F(DatabaseTest, Persistency)
     {
+        // Calculate the number of tuples that overflow  the buffer.
+        const size_t num_tuples = TEST_PAGE_SIZE * TEST_NUM_PAGES / sizeof(Tuple) * 2;
+
+        auto expected_map = SeedDB(num_tuples);
+        EXPECT_EQ(db_->size(), expected_map.size());
+
+        // Destroy db and create a new one.
+        RestructDB();
+
+        // Verify correctness
+        for (const auto &[key, expectedTuple] : expected_map)
+        {
+            Tuple actual = db_->get(key);
+            EXPECT_EQ(expectedTuple, actual);
+        }
     }
 
 }

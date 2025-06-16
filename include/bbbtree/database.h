@@ -35,7 +35,7 @@ namespace bbbtree
     {
     public:
         /// Constructor.
-        Database() : buffer_manager(PAGE_SIZE, NUM_PAGES), space_inventory(FSI_SEGMENT_ID, buffer_manager), records(SP_SEGMENT_ID, buffer_manager, space_inventory) {}
+        Database(size_t page_size = PAGE_SIZE, size_t num_pages = NUM_PAGES) : buffer_manager(page_size, num_pages), space_inventory(FSI_SEGMENT_ID, buffer_manager), records(SP_SEGMENT_ID, buffer_manager, space_inventory) {}
 
         /// Inserts a tuple into the database.
         void insert(Tuple &tuple);
@@ -46,7 +46,8 @@ namespace bbbtree
         Tuple get(Tuple::Key key);
         /// Deletes a tuple by key from the database.
         void erase(Tuple::Key key);
-        /// Updates a tuple by key. Key must already be present in database.
+        /// Returns the number of tuples stored in the database.
+        size_t size() { return index.size(); }
 
     private:
         /// The buffer manager.
@@ -57,7 +58,7 @@ namespace bbbtree
         SPSegment records;
         /// The access path. Maps keys to their tuple IDs.
         /// TODO: Template the database on the index.
-        std::unordered_map<Tuple::Key, TID> index;
+        std::unordered_map<Tuple::Key, TID> index{};
     };
 }
 
