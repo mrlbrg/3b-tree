@@ -12,13 +12,17 @@ namespace bbbtree
         // Add TID to index
         auto [it, success] = index.try_emplace(tuple.key, tid);
         if (!success)
+        {
+            records.erase(tid);
             throw std::logic_error("Database::insert(): Key already in database.");
+        }
         // Insert tuple in records
         records.write(tid, reinterpret_cast<const std::byte *>(&tuple), sizeof(tuple));
     }
 
     void Database::insert(std::vector<Tuple> tuples)
     {
+        // TODO: Detect sequential inserts?
         for (auto &tuple : tuples)
             insert(tuple);
     }
@@ -44,4 +48,4 @@ namespace bbbtree
         throw std::logic_error("Database::erase(): Not implemented yet.");
     }
 
-} // namespace bbbtree}
+} // namespace bbbtree

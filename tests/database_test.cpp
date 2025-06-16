@@ -53,6 +53,12 @@ namespace
             EXPECT_EQ(expectedTuple, actual);
         }
     }
+    TEST(Database, DuplicateKeys)
+    {
+        Database db;
+        db.insert({Tuple{0, 1}});
+        EXPECT_THROW(db.insert({Tuple{0, 2}}), std::logic_error);
+    }
     // A tuple can be inserted and read again, also if data exceeds buffer size.
     TEST(Database, OutOfMemory)
     {

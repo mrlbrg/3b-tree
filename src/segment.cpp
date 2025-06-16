@@ -110,4 +110,10 @@ namespace bbbtree
 
         return record_size;
     }
+
+    void SPSegment::erase(TID tid)
+    {
+        // TODO
+        throw std::logic_error("Database::erase(): Not implemented yet.");
+    }
 }

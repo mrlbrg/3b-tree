@@ -68,7 +68,7 @@ namespace bbbtree
       uint32_t write(TID tid, const std::byte *record, uint32_t record_size);
       /// TODO: Resizes a tuple.
       void resize(TID tid, uint32_t new_length);
-      /// TODO: Erases a tuple from the slotted page.
+      /// Erases a tuple from the slotted page.
       void erase(TID tid);
 
    private:
