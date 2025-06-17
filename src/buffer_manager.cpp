@@ -24,7 +24,8 @@ namespace bbbtree
             size_t page_begin = frame.page_id * page_size;
             size_t page_end = page_begin + page_size;
             auto &file = get_segment(frame.segment_id);
-            file.resize(page_end);
+            if (file.size() < page_end)
+                file.resize(page_end);
             // TODO: Make sure everything was written out.
             file.write_block(frame.data, page_begin, page_size);
         }
@@ -136,6 +137,10 @@ namespace bbbtree
             i = (i + 1) % page_frames.size();
             frame = &(page_frames[i]);
         }
+
+        // Remove frame from directory
+        auto segment_page_id = frame->page_id ^ (static_cast<uint64_t>(frame->segment_id) << 48);
+        id_to_frame.erase(segment_page_id);
 
         // TODO: Must also be written when page is new.
         // Write dirty pages out.

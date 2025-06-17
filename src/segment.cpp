@@ -86,6 +86,8 @@ namespace bbbtree
         uint32_t bytes_read = std::min(capacity, slot.get_size());
         std::memcpy(record, data, bytes_read);
 
+        buffer_manager.unfix_page(frame, false);
+
         return bytes_read;
     }
 
