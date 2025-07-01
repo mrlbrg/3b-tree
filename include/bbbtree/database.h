@@ -18,6 +18,7 @@ namespace bbbtree
     static const constexpr SegmentID SP_SEGMENT_ID = 1;
 
     /// A Tuple with key and value that are stored in the database.
+    /// TODO: Make keys variable-sized.
     struct Tuple
     {
         using Key = uint64_t;
@@ -31,6 +32,7 @@ namespace bbbtree
     };
 
     /// A Database maintains a single table of keys and values. The schema is fixated at compile-time.
+    /// It is templated on its access path to tuples identified through their keys.
     class Database
     {
     public:
@@ -38,6 +40,7 @@ namespace bbbtree
         Database(size_t page_size = PAGE_SIZE, size_t num_pages = NUM_PAGES, bool reset = false);
 
         /// Inserts a tuple into the database.
+        /// TODO: Allow insert of variable sized tuples.
         void insert(Tuple &tuple);
         /// Inserts tuples into the database.
         /// Tuple keys must not be already present in database.
@@ -45,6 +48,7 @@ namespace bbbtree
         /// Reads a value by key from the database.
         Tuple get(Tuple::Key key);
         /// Deletes a tuple by key from the database.
+        /// TODO: Implement erase.
         void erase(Tuple::Key key);
         /// Returns the number of tuples stored in the database.
         size_t size() { return index.size(); }

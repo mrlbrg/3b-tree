@@ -32,7 +32,6 @@ namespace bbbtree
    /// Encodes the free space left in a slotted page segment. Tracks the amount of existing slotted pages.
    /// TODO: For now, we append-only. Therefore we merely track the
    ///       last slotted page's space and the total amount of allocated pages.
-   /// TODO: For now, we do not persist the FSI. We always start from an empty FSI on start-up.
    class FSISegment : public Segment
    {
    public:
