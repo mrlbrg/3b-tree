@@ -37,19 +37,22 @@ namespace bbbtree
    {
    public:
       /// Constructor. TODO: When segment (file) was not allocated so far, set the header of the first page to 0.
-      FSISegment(SegmentID segment_id, BufferManager &buffer_manager) : Segment(segment_id, buffer_manager) {}
+      FSISegment(SegmentID segment_id, BufferManager &buffer_manager);
       /// Find a free page. Optionally returns the page ID.
       std::optional<uint64_t> find(uint32_t required_space);
       /// Updates the amount of free space on the target page. Updated by the Slotted Pages Segment.
       void update(uint64_t target_page, uint32_t free_space);
       /// Creates a new page's inventory. Returns the new page's ID.
-      PageID create_new_page(uint32_t initial_free_space);
+      PageID create_new_page(size_t initial_free_space);
 
    private:
-      /// The number of allocated slotted pages so far.
-      size_t allocated_pages = 0;
-      /// The free space on the last slotted page.
-      size_t free_space = 0;
+      struct Header
+      {
+         /// The number of allocated slotted pages so far.
+         size_t allocated_pages;
+         /// The free space on the last slotted page.
+         size_t free_space;
+      };
    };
 
    /// A segment (here equivalent to a file) containing all the slotted pages.

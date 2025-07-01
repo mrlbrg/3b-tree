@@ -19,15 +19,15 @@ namespace
     class DatabaseTest : public ::testing::Test
     {
     protected:
-        void RestructDB()
+        void RestructDB(bool reset)
         {
-            db_ = std::make_unique<Database>(TEST_PAGE_SIZE, TEST_NUM_PAGES);
+            db_ = std::make_unique<Database>(TEST_PAGE_SIZE, TEST_NUM_PAGES, reset);
         }
 
         // Runs *before* each TEST_F
         void SetUp() override
         {
-            RestructDB();
+            RestructDB(true);
         }
 
         // Runs *after* each TEST_F
@@ -118,7 +118,7 @@ namespace
         EXPECT_EQ(db_->size(), expected_map.size());
 
         // Destroy db and create a new one.
-        RestructDB();
+        RestructDB(false);
 
         // Verify correctness
         for (const auto &[key, expectedTuple] : expected_map)

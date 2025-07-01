@@ -24,9 +24,11 @@ namespace bbbtree
             size_t page_begin = frame.page_id * page_size;
             size_t page_end = page_begin + page_size;
             auto &file = get_segment(frame.segment_id);
+            // TODO: Resizing is not thread safe. Must lock the whole file before doing so.
             if (file.size() < page_end)
+                // Sets new bytes to 0
                 file.resize(page_end);
-            // TODO: Make sure everything was written out.
+            // TODO: Make sure everything was written out by getting bytes.
             file.write_block(frame.data, page_begin, page_size);
         }
     }
@@ -94,6 +96,7 @@ namespace bbbtree
         // Page already buffered?
         if (frame_it != id_to_frame.end())
         {
+            // TODO: Already used by someone else?
             auto &frame = frame_it->second;
             frame->in_use = true;
             return *(frame_it->second);
@@ -112,6 +115,7 @@ namespace bbbtree
     {
         // Sanity check
         assert(frame.in_use);
+        // TODO: Check if is_dirty, lock must have been exclusive.
 
         if (is_dirty)
             frame.state = State::DIRTY;
@@ -189,6 +193,12 @@ namespace bbbtree
         auto [new_it, success] = segment_to_file.emplace(segment_id, File::open_file(file_name.data(), File::Mode::WRITE));
 
         return *(new_it->second);
+    }
+    // ------------------------------------------------------------------
+    void BufferManager::reset(SegmentID segment_id)
+    {
+        auto &file = get_segment(segment_id);
+        file.resize(0);
     }
     // ------------------------------------------------------------------
 } // namespace bbbtree

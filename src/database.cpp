@@ -5,6 +5,15 @@
 namespace bbbtree
 {
 
+    Database::Database(size_t page_size, size_t num_pages, bool reset) : buffer_manager(page_size, num_pages), space_inventory(FSI_SEGMENT_ID, buffer_manager), records(SP_SEGMENT_ID, buffer_manager, space_inventory)
+    {
+        if (reset)
+        {
+            buffer_manager.reset(FSI_SEGMENT_ID);
+            buffer_manager.reset(SP_SEGMENT_ID);
+        }
+    }
+
     void Database::insert(Tuple &tuple)
     {
         // Get a new TID

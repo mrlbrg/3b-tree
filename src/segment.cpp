@@ -6,35 +6,53 @@
 
 namespace bbbtree
 {
+    FSISegment::FSISegment(SegmentID segment_id, BufferManager &buffer_manager) : Segment(segment_id, buffer_manager)
+    {
+    }
 
     std::optional<uint64_t> FSISegment::find(uint32_t required_space)
     {
-        // TODO: actually store all this information on a page to persist it.
+        auto &frame = buffer_manager.fix_page(segment_id, 0, false);
+        auto &header = *(reinterpret_cast<FSISegment::Header *>(frame.get_data()));
 
         // Enough space?
-        if (free_space < required_space)
+        if (header.free_space < required_space)
+        {
+            buffer_manager.unfix_page(frame, false);
             return {};
+        }
 
-        return {allocated_pages - 1};
+        buffer_manager.unfix_page(frame, false);
+        return {header.allocated_pages - 1};
     }
 
     void FSISegment::update(uint64_t target_page, uint32_t new_free_space)
     {
-        if (target_page != (allocated_pages - 1))
+        auto &frame = buffer_manager.fix_page(segment_id, 0, true);
+        auto &header = *(reinterpret_cast<FSISegment::Header *>(frame.get_data()));
+
+        if (target_page != (header.allocated_pages - 1))
             throw std::logic_error("FSISegment::update(): Cannot update a page's free space which is not the last.");
 
-        if (free_space < new_free_space)
+        if (header.free_space < new_free_space)
             throw std::logic_error("FSISegment::update(): Free space on a slotted page can only shrink.");
 
-        free_space = new_free_space;
+        header.free_space = new_free_space;
+        buffer_manager.unfix_page(frame, true);
     }
 
-    PageID FSISegment::create_new_page(uint32_t initial_free_space)
+    PageID FSISegment::create_new_page(size_t initial_free_space)
     {
+        auto &frame = buffer_manager.fix_page(segment_id, 0, true);
+        auto &header = *(reinterpret_cast<FSISegment::Header *>(frame.get_data()));
+
         // TODO: Synchronize this when multi-threading.
-        ++allocated_pages;
-        free_space = initial_free_space;
-        return allocated_pages - 1;
+        ++header.allocated_pages;
+        header.free_space = initial_free_space;
+        auto page_id = header.allocated_pages - 1;
+        buffer_manager.unfix_page(frame, true);
+
+        return page_id;
     }
 
     TID SPSegment::allocate(uint32_t size)

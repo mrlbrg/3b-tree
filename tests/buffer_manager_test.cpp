@@ -35,23 +35,69 @@ namespace
         size_t page_size = 1024;
         bbbtree::BufferManager buffer_manager{page_size, 1};
 
+        // Load page into buffer
         auto &page = buffer_manager.fix_page(348, 1, true);
-
-        // Cannot evict a page when its fixed.
-        EXPECT_THROW(buffer_manager.fix_page(348, 2, true), bbbtree::buffer_full_error);
-
-        // Can evict a page when its not fixed.
         buffer_manager.unfix_page(page, false);
-        EXPECT_NO_THROW(buffer_manager.fix_page(248, 2, true));
+        // Can evict a page when its not fixed.
+        EXPECT_NO_THROW(buffer_manager.fix_page(169, 2, true));
     }
     // TODO: Fill in tests.
     /// A page can be fixed exclusively. Someone else cannot fix that page.
     TEST(BufferManager, ExclusiveFlag) {}
     /// A page does not loose state on eviction.
-    TEST(BufferManager, PersistentEviction) {}
+    TEST(BufferManager, PersistentEviction)
+    {
+
+        size_t page_size = 1024;
+        bbbtree::BufferManager buffer_manager{page_size, 1};
+        {
+            auto &frame = buffer_manager.fix_page(348, 1, true);
+            auto *data = frame.get_data();
+            *data = 'a';
+            buffer_manager.unfix_page(frame, true);
+        }
+        // Evict page
+        {
+            auto &frame = buffer_manager.fix_page(169, 1, true);
+            buffer_manager.unfix_page(frame, false);
+        }
+        // Load page again
+        {
+            auto &frame = buffer_manager.fix_page(348, 1, true);
+            auto *data = frame.get_data();
+            EXPECT_EQ(*data, 'a');
+            buffer_manager.unfix_page(frame, true);
+        }
+    }
     /// When the buffer manager is destroyed, all pages are persisted.
-    TEST(BufferManager, PersistentRestart) {}
+    TEST(BufferManager, PersistentRestart)
+    {
+        size_t page_size = 1024;
+        {
+            bbbtree::BufferManager buffer_manager{page_size, 1};
+            auto &frame = buffer_manager.fix_page(348, 1, true);
+            auto *data = frame.get_data();
+            *data = 'a';
+            buffer_manager.unfix_page(frame, true);
+        }
+        // Destruct Buffer Manager
+        {
+            bbbtree::BufferManager buffer_manager{page_size, 1};
+            auto &frame = buffer_manager.fix_page(348, 1, true);
+            auto *data = frame.get_data();
+            EXPECT_EQ(*data, 'a');
+            buffer_manager.unfix_page(frame, true);
+        }
+    }
     /// When the buffer is full and all pages are exclusively locked, an error is thrown.
-    TEST(BufferManager, BufferFull) {}
+    TEST(BufferManager, BufferFull)
+    {
+        bbbtree::BufferManager buffer_manager{1024, 1};
+
+        auto &page = buffer_manager.fix_page(348, 1, true);
+
+        // Cannot evict a page when all are in use.
+        EXPECT_THROW(buffer_manager.fix_page(169, 2, true), bbbtree::buffer_full_error);
+    }
 
 }

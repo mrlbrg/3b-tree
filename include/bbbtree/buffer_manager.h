@@ -87,7 +87,11 @@ namespace bbbtree
         /// Releases a page. If dirty, its written to disk eventually.
         void unfix_page(BufferFrame &frame, bool is_dirty);
 
+        /// Returns a page's size.
         size_t get_page_size() { return page_size; }
+
+        /// Resets contents of a segment. Not thread-safe.
+        void reset(SegmentID segment_id);
 
     private:
         /// Gets a free buffer frame. Evicts another page when buffer is full.

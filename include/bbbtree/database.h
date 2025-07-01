@@ -35,7 +35,7 @@ namespace bbbtree
     {
     public:
         /// Constructor.
-        Database(size_t page_size = PAGE_SIZE, size_t num_pages = NUM_PAGES) : buffer_manager(page_size, num_pages), space_inventory(FSI_SEGMENT_ID, buffer_manager), records(SP_SEGMENT_ID, buffer_manager, space_inventory) {}
+        Database(size_t page_size = PAGE_SIZE, size_t num_pages = NUM_PAGES, bool reset = false);
 
         /// Inserts a tuple into the database.
         void insert(Tuple &tuple);
@@ -60,6 +60,7 @@ namespace bbbtree
         /// TODO: Template the database on the index.
         std::unordered_map<Tuple::Key, TID> index{};
     };
+
 }
 
 #endif // INCLUDE_BBBTREE_DATABASE_H_
