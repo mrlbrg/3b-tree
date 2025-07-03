@@ -94,7 +94,7 @@ namespace
     {
         bbbtree::BufferManager buffer_manager{1024, 1};
 
-        auto &page = buffer_manager.fix_page(348, 1, true);
+        buffer_manager.fix_page(348, 1, true);
 
         // Cannot evict a page when all are in use.
         EXPECT_THROW(buffer_manager.fix_page(169, 2, true), bbbtree::buffer_full_error);

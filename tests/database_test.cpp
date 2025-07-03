@@ -13,6 +13,8 @@ using namespace bbbtree;
 
 namespace
 {
+    using TestIndex = std::unordered_map<Tuple::Key, TID>;
+
     static const constexpr size_t TEST_PAGE_SIZE = 1024;
     static const constexpr size_t TEST_NUM_PAGES = 3;
 
@@ -21,7 +23,7 @@ namespace
     protected:
         void RestructDB(bool reset)
         {
-            db_ = std::make_unique<Database>(TEST_PAGE_SIZE, TEST_NUM_PAGES, reset);
+            db_ = std::make_unique<Database<TestIndex>>(TEST_PAGE_SIZE, TEST_NUM_PAGES, reset);
         }
 
         // Runs *before* each TEST_F
@@ -66,7 +68,7 @@ namespace
 
         /// The database under test. When changing these parameters, also change the test's parameters,
         /// e.g. when testing in or out of memory behavior.
-        std::unique_ptr<Database> db_;
+        std::unique_ptr<Database<TestIndex>> db_;
     };
 
     // A tuple inserted can be read again when all data fits in memory buffer.

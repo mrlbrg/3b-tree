@@ -1,5 +1,4 @@
-#ifndef INCLUDE_BBBTREE_FILE_H_
-#define INCLUDE_BBBTREE_FILE_H_
+#pragma once
 
 #include <cstdint>
 #include <memory>
@@ -113,5 +112,3 @@ namespace bbbtree
     };
 
 } // namespace bbbtree
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef INCLUDE_BBBTREE_SEGMENT_H_
-#define INCLUDE_BBBTREE_SEGMENT_H_
+#pragma once
 
 #include "bbbtree/buffer_manager.h"
 #include "bbbtree/tuple_id.h"
@@ -9,29 +8,28 @@
 
 namespace bbbtree
 {
-
    /// A segment manages a collection of corresponding pages, e.g. a collection of slotted pages.
    /// It currently maps to a single file.
    class Segment
    {
    public:
       /// Constructor.
-      /// @param[in] segment_id       ID of the segment.
-      /// @param[in] buffer_manager   The buffer manager that should be used by the segment.
       Segment(SegmentID segment_id, BufferManager &buffer_manager)
           : segment_id(segment_id), buffer_manager(buffer_manager) {}
 
-      /// The segment id
+      /// The segment id.
       SegmentID segment_id;
 
    protected:
-      /// The buffer manager
+      /// The buffer manager.
       BufferManager &buffer_manager;
    };
 
    /// Encodes the free space left in a slotted page segment. Tracks the amount of existing slotted pages.
+   /// Caller must ensure that a new page's bytes are set to 0. Otherwise its undefined behaviour.
    /// TODO: For now, we append-only. Therefore we merely track the
    ///       last slotted page's space and the total amount of allocated pages.
+   /// TODO: Only a dummy, append-only FSI Segment. Do not use it for index bootstrapping. Do not maintain it in its own file.
    class FSISegment : public Segment
    {
    public:
@@ -41,7 +39,7 @@ namespace bbbtree
       std::optional<uint64_t> find(uint32_t required_space);
       /// Updates the amount of free space on the target page. Updated by the Slotted Pages Segment.
       void update(uint64_t target_page, uint32_t free_space);
-      /// Creates a new page's inventory. Returns the new page's ID.
+      /// Creates a new page in this inventory. Returns the new page's ID.
       PageID create_new_page(size_t initial_free_space);
 
    private:
@@ -81,5 +79,3 @@ namespace bbbtree
       FSISegment &space_inventory;
    };
 }
-
-#endif // INCLUDE_BBBTREE_SEGMENT_H_

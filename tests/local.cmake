@@ -11,6 +11,7 @@ set(TEST_CC
     tests/segment_test.cpp
     tests/buffer_manager_test.cpp
     tests/slotted_page_test.cpp
+    tests/btree_test.cpp
 )
 
 # ---------------------------------------------------------------------------

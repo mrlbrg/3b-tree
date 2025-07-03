@@ -1,5 +1,4 @@
-#ifndef INCLUDE_BBBTREE_BUFFER_MANAGER_H_
-#define INCLUDE_BBBTREE_BUFFER_MANAGER_H_
+#pragma once
 
 #include "bbbtree/types.h"
 #include "bbbtree/file.h"
@@ -126,4 +125,3 @@ namespace bbbtree
         std::map<SegmentID, std::unique_ptr<File>> segment_to_file;
     };
 }
-#endif // INCLUDE_BBBTREE_BUFFER_MANAGER_H_

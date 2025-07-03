@@ -22,8 +22,10 @@ namespace bbbtree
             return {};
         }
 
+        auto page_id = header.allocated_pages - 1;
         buffer_manager.unfix_page(frame, false);
-        return {header.allocated_pages - 1};
+
+        return {page_id};
     }
 
     void FSISegment::update(uint64_t target_page, uint32_t new_free_space)

@@ -1,5 +1,4 @@
-#ifndef INCLUDE_BBBTREE_DATABASE_H_
-#define INCLUDE_BBBTREE_DATABASE_H_
+#pragma once
 
 #include "bbbtree/buffer_manager.h"
 #include "bbbtree/tuple_id.h"
@@ -7,6 +6,8 @@
 
 #include <vector>
 #include <cstdint>
+#include <optional>
+#include <iterator>
 
 // TODO: Rethink `logic_errors` and which error makes more sense to throw.
 
@@ -31,8 +32,17 @@ namespace bbbtree
         bool operator==(const Tuple &other) const { return key == other.key && value == other.value; }
     };
 
+    /// A concept that requires some member functions for an index.
+    // template <typename IndexT>
+    // concept Indexable = requires(IndexT index, Tuple::Key key, Tuple::Value value) {
+    //     { index.lookup(key) } -> std::same_as<std::optional<Tuple::Value>>;
+    //     { index.erase(key) } -> std::same_as<void>;
+    //     { index.insert(key, value) } -> std::same_as<void>;
+    // };
+
     /// A Database maintains a single table of keys and values. The schema is fixated at compile-time.
     /// It is templated on its access path to tuples identified through their keys.
+    template <typename IndexT>
     class Database
     {
     public:
@@ -54,17 +64,72 @@ namespace bbbtree
         size_t size() { return index.size(); }
 
     private:
-        /// The buffer manager.
-        BufferManager buffer_manager;
         /// The Free-Space-Inventory segment.
         FSISegment space_inventory;
         /// The Slotted Pages segment.
         SPSegment records;
-        /// The access path. Maps keys to their tuple IDs.
+        /// The access path. Maps keys to their tuple IDs (`TID`).
         /// TODO: Template the database on the index.
-        std::unordered_map<Tuple::Key, TID> index{};
+        IndexT index{};
+        /// The buffer manager. Note that the buffer manager must be the last member
+        /// To ensure that it is destructed last. Other members might have pages to persist in their destructor.
+        BufferManager buffer_manager;
     };
+    // -----------------------------------------------------------------
+    template <typename IndexT>
+    Database<IndexT>::Database(size_t page_size, size_t num_pages, bool reset) : buffer_manager(page_size, num_pages), space_inventory(FSI_SEGMENT_ID, buffer_manager), records(SP_SEGMENT_ID, buffer_manager, space_inventory)
+    {
+        if (reset)
+        {
+            buffer_manager.reset(FSI_SEGMENT_ID);
+            buffer_manager.reset(SP_SEGMENT_ID);
+        }
+    }
+    // -----------------------------------------------------------------
+    template <typename IndexT>
+    void Database<IndexT>::insert(Tuple &tuple)
+    {
+        // Get a new TID
+        auto tid = records.allocate(sizeof(tuple));
+        // Add TID to index
+        auto [it, success] = index.try_emplace(tuple.key, tid);
+        if (!success)
+        {
+            records.erase(tid);
+            throw std::logic_error("Database<IndexT>::insert(): Key already in database.");
+        }
+        // Insert tuple in records
+        records.write(tid, reinterpret_cast<const std::byte *>(&tuple), sizeof(tuple));
+    }
+    // -----------------------------------------------------------------
+    template <typename IndexT>
+    void Database<IndexT>::insert(std::vector<Tuple> tuples)
+    {
+        // TODO: Detect sequential inserts?
+        for (auto &tuple : tuples)
+            insert(tuple);
+    }
+    // -----------------------------------------------------------------
+    template <typename IndexT>
+    Tuple Database<IndexT>::get(Tuple::Key key)
+    {
+        // Get TID for key
+        auto it = index.find(key);
+        if (it == index.end())
+            throw std::out_of_range("Database<IndexT>::get(): Key not found.");
+        // Get Tuple
+        Tuple tuple{};
+        auto bytes_read = records.read(it->second, reinterpret_cast<std::byte *>(&tuple), sizeof(tuple));
+        if (bytes_read != sizeof(tuple))
+            throw std::logic_error("Database<IndexT>::get(): Read corrupted.");
 
+        return tuple;
+    }
+    // -----------------------------------------------------------------
+    template <typename IndexT>
+    void Database<IndexT>::erase(Tuple::Key key)
+    {
+        // TODO
+        throw std::logic_error("Database<IndexT>::erase(): Not implemented yet.");
+    }
 }
-
-#endif // INCLUDE_BBBTREE_DATABASE_H_

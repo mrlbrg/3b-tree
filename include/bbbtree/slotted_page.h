@@ -1,5 +1,4 @@
-#ifndef INCLUDE_BBBTREE_SLOTTEDPAGE_H_
-#define INCLUDE_BBBTREE_SLOTTEDPAGE_H_
+#pragma once
 
 #include "bbbtree/tuple_id.h"
 #include <cstddef>
@@ -90,5 +89,3 @@ namespace bbbtree
 
     static_assert(sizeof(SlottedPage) == sizeof(SlottedPage::Header), "An empty slotted page must only contain the header");
 } // namespace bbbtree
-
-#endif // INCLUDE_BBBTREE_SLOTTEDPAGE_H_
