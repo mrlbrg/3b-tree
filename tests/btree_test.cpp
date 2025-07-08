@@ -4,6 +4,15 @@
 
 namespace
 {
+    TEST(BTree, SingleNodeLookup)
+    {
+        size_t page_size = 1024;
+        bbbtree::BufferManager buffer_manager{page_size, 10};
+        bbbtree::BTree<uint64_t, uint64_t> index{834, buffer_manager};
+
+        index.insert(1, 2);
+        EXPECT_EQ(index.lookup(1), 2);
+    }
 
     /// A Tree is bootstrapped correctly at initialization.
     TEST(BTree, Startup)
@@ -20,4 +29,5 @@ namespace
     TEST(BTree, Get) {}
     /// A B-Tree can split its nodes.
     TEST(BTree, NodeSplit) {}
+    /// Search of an empty node works as expected.
 }
