@@ -38,7 +38,7 @@ BTree<KeyT, ValueT>::~BTree() {
 	auto &frame = buffer_manager.fix_page(segment_id, 0, true);
 	auto &header = *(reinterpret_cast<Header *>(frame.get_data()));
 	header.root_page = root;
-	header.next_free_page = header.next_free_page;
+	header.next_free_page = next_free_page;
 	buffer_manager.unfix_page(frame, true);
 }
 // -----------------------------------------------------------------

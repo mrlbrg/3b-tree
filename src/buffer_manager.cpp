@@ -14,21 +14,19 @@ void BufferManager::reset(BufferFrame &frame) {
 }
 // ----------------------------------------------------------------
 void BufferManager::unload(BufferFrame &frame) {
-	switch (frame.state) {
-	case State::UNDEFINED:
-	case State::CLEAN:
-	case State::DIRTY:
-		size_t page_begin = frame.page_id * page_size;
-		size_t page_end = page_begin + page_size;
-		auto &file = get_segment(frame.segment_id);
-		// TODO: Resizing is not thread safe. Must lock the whole file before
-		// doing so.
-		if (file.size() < page_end)
-			// Sets new bytes to 0
-			file.resize(page_end);
-		// TODO: Make sure everything was written out by getting bytes.
-		file.write_block(frame.data, page_begin, page_size);
-	}
+	// Sanity Check: Caller must ensure that page needs to be unloaded.
+	assert(frame.state == State::DIRTY);
+
+	size_t page_begin = frame.page_id * page_size;
+	size_t page_end = page_begin + page_size;
+	auto &file = get_segment(frame.segment_id);
+	// TODO: Resizing is not thread safe. Must lock the whole file before
+	// doing so.
+	if (file.size() < page_end)
+		// Sets new bytes to 0
+		file.resize(page_end);
+	// TODO: Make sure everything was written out by getting bytes.
+	file.write_block(frame.data, page_begin, page_size);
 }
 // -----------------------------------------------------------------
 void BufferManager::load(BufferFrame &frame, SegmentID segment_id,

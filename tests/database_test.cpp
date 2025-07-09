@@ -17,13 +17,13 @@ static const constexpr size_t TEST_NUM_PAGES = 3;
 
 class DatabaseTest : public ::testing::Test {
   protected:
-	void RestructDB(bool reset) {
+	void Destroy(bool reset) {
 		db_ = std::make_unique<Database<TestIndex>>(TEST_PAGE_SIZE,
 													TEST_NUM_PAGES, reset);
 	}
 
 	// Runs *before* each TEST_F
-	void SetUp() override { RestructDB(true); }
+	void SetUp() override { Destroy(true); }
 
 	// Runs *after* each TEST_F
 	void TearDown() override {}
@@ -104,7 +104,7 @@ TEST_F(DatabaseTest, Persistency) {
 	EXPECT_EQ(db_->size(), expected_map.size());
 
 	// Destroy db and create a new one.
-	RestructDB(false);
+	Destroy(false);
 
 	// Verify correctness
 	for (const auto &[key, expectedTuple] : expected_map) {
