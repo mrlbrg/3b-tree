@@ -39,7 +39,8 @@ namespace
         auto &page = buffer_manager.fix_page(348, 1, true);
         buffer_manager.unfix_page(page, false);
         // Can evict a page when its not fixed.
-        EXPECT_NO_THROW(buffer_manager.fix_page(169, 2, true));
+        auto &page2 = buffer_manager.fix_page(169, 2, true);
+        buffer_manager.unfix_page(page2, false);
     }
     // TODO: Fill in tests.
     /// A page can be fixed exclusively. Someone else cannot fix that page.
@@ -94,10 +95,11 @@ namespace
     {
         bbbtree::BufferManager buffer_manager{1024, 1};
 
-        buffer_manager.fix_page(348, 1, true);
+        auto &page = buffer_manager.fix_page(348, 1, true);
 
         // Cannot evict a page when all are in use.
         EXPECT_THROW(buffer_manager.fix_page(169, 2, true), bbbtree::buffer_full_error);
+        buffer_manager.unfix_page(page, false);
     }
 
 }

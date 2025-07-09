@@ -73,6 +73,7 @@ namespace bbbtree
             return root_frame;
 
         // TODO:
+        buffer_manager.unfix_page(root_frame, false);
         throw std::logic_error("BTree::get_leaf(): Not implemented yet.");
 
         // Find the first slot which is not smaller than the key.
@@ -88,10 +89,22 @@ namespace bbbtree
         auto &leaf_frame = get_leaf(key);
         auto &leaf = *reinterpret_cast<LeafNode *>(leaf_frame.get_data());
 
-        auto is_leaf_full = leaf.insert(key, value);
+        // Node Split?
+        if (leaf.get_free_space() < (sizeof(KeyT) + sizeof(typename LeafNode::Slot)))
+        {
+            buffer_manager.unfix_page(leaf_frame, false);
+            throw std::logic_error("BTree::insert(): Node split not implemented yet.");
+        }
 
-        if (is_leaf_full)
-            throw std::logic_error("Database::insert(): Node split not implemented yet.");
+        auto success = leaf.insert(key, value);
+
+        if (!success)
+        {
+            buffer_manager.unfix_page(leaf_frame, false);
+            throw std::logic_error("BTree::insert(): Key already exists.");
+        }
+
+        buffer_manager.unfix_page(leaf_frame, false);
 
         // auto &leaf_page = get_leaf(key);
         // auto &leaf_node = LeafNode::page_to_leaf(leaf_page.get_data());
@@ -180,16 +193,20 @@ namespace bbbtree
     template <LessEqualComparable KeyT, typename ValueT>
     bool BTree<KeyT, ValueT>::LeafNode::insert(const KeyT &key, const ValueT &value)
     {
-        // Create a slot if space. Otherwise split.
-        // TODO: sizeof(KeyT) does not work for variable-size keys. Implement custom type wrappers that all implement size() functions.
-        if (get_free_space() < (sizeof(KeyT) + sizeof(Slot)))
-            return false;
+        // Sanity Check: User must ensure that there is enough space on leaf node for insertion.
+        assert(get_free_space() >= (sizeof(KeyT) + sizeof(LeafNode::Slot)));
 
         // Insert new slot.
-        auto *slot_start = lower_bound(key);
-        auto *slot_end = slots_begin() + this->slot_count;
+        auto *insert_pos = lower_bound(key);
+        if (insert_pos != slots_end())
+        {
+            const auto &found_key = *reinterpret_cast<KeyT *>(this->get_data() + insert_pos->offset);
+            if (found_key == key)
+                return false;
+        }
+
         // Move each slot up by one to make space for new one.
-        for (auto *slot = slot_end; slot > slot_start; --slot)
+        for (auto *slot = slots_end(); slot > insert_pos; --slot)
         {
             auto &source_slot = *(slot - 1);
             auto &target_slot = *(slot);
@@ -197,15 +214,16 @@ namespace bbbtree
         }
         this->data_start -= sizeof(KeyT);
         assert(sizeof(KeyT) <= std::numeric_limits<uint16_t>::max());
-        *slot_start = Slot{value, this->data_start, static_cast<uint16_t>(sizeof(KeyT))};
+        *insert_pos = Slot{value, this->data_start, static_cast<uint16_t>(sizeof(KeyT))};
         ++this->slot_count;
+        assert(reinterpret_cast<std::byte *>(slots_end()) <= this->get_data() + this->data_start);
 
         // Insert key.
         KeyT &target_data = *(reinterpret_cast<KeyT *>(this->get_data() + this->data_start));
         // TODO: `KeyT` must implement copy assignment.
         target_data = key;
 
-        return false;
+        return true;
     }
     // -----------------------------------------------------------------
     // Explicit instantiations

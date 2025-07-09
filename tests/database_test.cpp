@@ -21,22 +21,13 @@ namespace
     class DatabaseTest : public ::testing::Test
     {
     protected:
-        void RestructDB(bool reset)
-        {
-            db_ = std::make_unique<Database<TestIndex>>(TEST_PAGE_SIZE, TEST_NUM_PAGES, reset);
-        }
+        void RestructDB(bool reset) { db_ = std::make_unique<Database<TestIndex>>(TEST_PAGE_SIZE, TEST_NUM_PAGES, reset); }
 
         // Runs *before* each TEST_F
-        void SetUp() override
-        {
-            RestructDB(true);
-        }
+        void SetUp() override { RestructDB(true); }
 
         // Runs *after* each TEST_F
-        void TearDown() override
-        {
-            // TODO: Deletes created files.
-        }
+        void TearDown() override {}
 
         std::unordered_map<Tuple::Key, Tuple> SeedDB(size_t num_tuples)
         {

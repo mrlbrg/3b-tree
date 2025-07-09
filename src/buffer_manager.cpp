@@ -11,7 +11,7 @@ namespace bbbtree
     void BufferManager::reset(BufferFrame &frame)
     {
         frame.state = State::UNDEFINED;
-        assert(frame.in_use == false);
+        assert(!frame.in_use);
     }
     // ----------------------------------------------------------------
     void BufferManager::unload(BufferFrame &frame)
@@ -83,6 +83,8 @@ namespace bbbtree
     {
         for (auto &frame : page_frames)
         {
+            // Make sure all pages were unfixed again.
+            assert(!frame.in_use);
             // TODO: Must also be written when page is new.
             if (frame.state == State::DIRTY)
                 unload(frame);
@@ -91,6 +93,9 @@ namespace bbbtree
     // -----------------------------------------------------------------
     BufferFrame &BufferManager::fix_page(SegmentID segment_id, PageID page_id, bool exclusive)
     {
+        // Sanity Check
+        assert((page_id & 0xFFFF000000000000ULL) == 0);
+
         auto segment_page_id = page_id ^ (static_cast<uint64_t>(segment_id) << 48);
         auto frame_it = id_to_frame.find(segment_page_id);
         // Page already buffered?
@@ -119,6 +124,7 @@ namespace bbbtree
 
         if (is_dirty)
             frame.state = State::DIRTY;
+        // TODO: When we have several readers, we do not want to set this so false. Somebody else might still be using this.
         frame.in_use = false;
     }
     // ----------------------------------------------------------------
@@ -152,7 +158,7 @@ namespace bbbtree
             unload(*frame);
 
         // Free the frame from ownership.
-        assert(frame->in_use == false);
+        assert(!frame->in_use);
         frame->state = State::UNDEFINED;
         free_buffer_frames.emplace_back(frame);
 

@@ -13,10 +13,12 @@
 
 namespace bbbtree
 {
-
+    /// Requirements for the keys of the tree. TODO.
     template <typename T>
     concept LessEqualComparable = requires(T a, T b) {
         { a <= b } -> std::convertible_to<bool>;
+        { a == b } -> std::convertible_to<bool>;
+        sizeof(T);
     };
 
     /// External Storage index that maps from unique, possibly variable-length keys to TID identifying the tuple's location
@@ -147,7 +149,7 @@ namespace bbbtree
             std::optional<ValueT> lookup(const KeyT &key);
 
             /// Inserts a key, value pair into this leaf. Returns true if key was actually inserted.
-            /// Returns false if leaf is full.
+            /// Returns false if key already exists. Caller must ensure that there is enough space.
             bool insert(const KeyT &key, const ValueT &value);
 
         private:
@@ -158,7 +160,7 @@ namespace bbbtree
             /// Get start of slots section.
             Slot *slots_begin() { return reinterpret_cast<Slot *>(this->get_data() + sizeof(LeafNode)); }
             /// Get end of slots section.
-            Slot *slots_end() { return reinterpret_cast<Slot *>(this->get_data() + sizeof(LeafNode) + this->slot_count); }
+            Slot *slots_end() { return reinterpret_cast<Slot *>(this->get_data() + sizeof(LeafNode) + this->slot_count * sizeof(Slot)); }
         };
 
         /// Constructor. Not thread-safe.

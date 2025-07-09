@@ -34,10 +34,16 @@ namespace bbbtree
         auto &header = *(reinterpret_cast<FSISegment::Header *>(frame.get_data()));
 
         if (target_page != (header.allocated_pages - 1))
+        {
+            buffer_manager.unfix_page(frame, true);
             throw std::logic_error("FSISegment::update(): Cannot update a page's free space which is not the last.");
+        }
 
         if (header.free_space < new_free_space)
+        {
+            buffer_manager.unfix_page(frame, true);
             throw std::logic_error("FSISegment::update(): Free space on a slotted page can only shrink.");
+        }
 
         header.free_space = new_free_space;
         buffer_manager.unfix_page(frame, true);
@@ -114,7 +120,7 @@ namespace bbbtree
     uint32_t SPSegment::write(TID tid, const std::byte *record, uint32_t record_size)
     {
         // Get Slot
-        auto &frame = buffer_manager.fix_page(segment_id, tid.get_page_id(), false);
+        auto &frame = buffer_manager.fix_page(segment_id, tid.get_page_id(), true);
         auto &slotted_page = get_slotted_page(frame);
         auto &slot = *(slotted_page.get_slots() + tid.get_slot_id());
 
@@ -123,7 +129,10 @@ namespace bbbtree
         // Enough size allocated?
         // TODO: Allow Resize
         if (slot.get_size() != record_size)
+        {
+            buffer_manager.unfix_page(frame, false);
             throw std::logic_error("SPSegment::write(): Size of record to be written must be the size allocated for the given tuple ID (TID).");
+        }
 
         // Write
         auto *data = slotted_page.get_data() + slot.get_offset();
