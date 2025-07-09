@@ -6,8 +6,6 @@
 
 #include <vector>
 #include <cstdint>
-#include <optional>
-#include <iterator>
 
 // TODO: Rethink `logic_errors` and which error makes more sense to throw.
 

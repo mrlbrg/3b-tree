@@ -1,5 +1,7 @@
 #include "bbbtree/btree.h"
 
+#include <algorithm>
+
 namespace bbbtree
 {
     // -----------------------------------------------------------------

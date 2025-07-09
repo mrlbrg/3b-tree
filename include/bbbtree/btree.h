@@ -4,8 +4,6 @@
 #include "bbbtree/segment.h"
 #include "bbbtree/types.h"
 
-#include <algorithm>
-#include <atomic>
 #include <cassert>
 #include <optional>
 

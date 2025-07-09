@@ -1,6 +1,7 @@
 #pragma once
 
-#include "bbbtree/tuple_id.h"
+#include "bbbtree/types.h"
+
 #include <cstddef>
 
 namespace bbbtree
