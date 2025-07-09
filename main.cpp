@@ -1,6 +1,7 @@
-#include <print>  // C++23
+#include <iostream>
 
-int main() {
-    std::println("Hello, World!");
+int main()
+{
+    std::cout << "Hello World!" << std::endl;
     return 0;
 }

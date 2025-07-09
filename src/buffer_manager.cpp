@@ -4,6 +4,7 @@
 #include <cstring>
 #include <cassert>
 #include <cstdlib>
+#include <string>
 // -----------------------------------------------------------------
 namespace bbbtree
 {
