@@ -1,14 +1,15 @@
 #include "bbbtree/btree.h"
+#include "bbbtree/buffer_manager.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <iostream>
 
 namespace bbbtree {
 // -----------------------------------------------------------------
 template <LessEqualComparable KeyT, typename ValueT>
 BTree<KeyT, ValueT>::BTree(SegmentID segment_id, BufferManager &buffer_manager)
 	: Segment(segment_id, buffer_manager) {
-	// TODO: only read from page at startup-time, then load it into memory and
-	// write it out on destruction again.
 	// TODO: Create some meta-data segment that stores information like the
 	// root's page id on file.
 	auto &frame = buffer_manager.fix_page(segment_id, 0, false);
@@ -44,7 +45,7 @@ BTree<KeyT, ValueT>::~BTree() {
 // -----------------------------------------------------------------
 template <LessEqualComparable KeyT, typename ValueT>
 std::optional<ValueT> BTree<KeyT, ValueT>::lookup(const KeyT &key) {
-	auto &leaf_frame = get_leaf(key);
+	auto &leaf_frame = get_leaf(key, false);
 	auto &leaf = *reinterpret_cast<LeafNode *>(leaf_frame.get_data());
 
 	// TODO: Not thread-safe.
@@ -61,16 +62,17 @@ void BTree<KeyT, ValueT>::erase(const KeyT &key) {
 }
 // -----------------------------------------------------------------
 template <LessEqualComparable KeyT, typename ValueT>
-BufferFrame &BTree<KeyT, ValueT>::get_leaf(const KeyT &key) {
-	// TODO: Allow variable for exclusive/shared lock.
-
-	auto &root_frame = buffer_manager.fix_page(segment_id, root, false);
+BufferFrame &BTree<KeyT, ValueT>::get_leaf(const KeyT &key, bool exclusive) {
+	// TODO: We only want the leaf to be locked exclusively. Must not lock all
+	// exclusively on the path here. Start with inexclusively reading root.
+	// Check if it's a leaf. If so, restart but take exclusive lock and return.
+	auto &root_frame = buffer_manager.fix_page(segment_id, root, exclusive);
 	auto &root_node = *reinterpret_cast<InnerNode *>(root_frame.get_data());
 
 	if (root_node.is_leaf())
 		return root_frame;
 
-	// TODO:
+	// TODO: Root is not a leaf.
 	buffer_manager.unfix_page(root_frame, false);
 	throw std::logic_error("BTree::get_leaf(): Not implemented yet.");
 
@@ -82,32 +84,68 @@ BufferFrame &BTree<KeyT, ValueT>::get_leaf(const KeyT &key) {
 // -----------------------------------------------------------------
 template <LessEqualComparable KeyT, typename ValueT>
 void BTree<KeyT, ValueT>::insert(const KeyT &key, const ValueT &value) {
+restart:
 	// TODO: This frame is not locked exclusively.
-	auto &leaf_frame = get_leaf(key);
+	auto &leaf_frame = get_leaf(key, true);
 	auto &leaf = *reinterpret_cast<LeafNode *>(leaf_frame.get_data());
 
-	// Node Split?
-	if (leaf.get_free_space() <
-		(sizeof(KeyT) + sizeof(typename LeafNode::Slot))) {
+	// Node split?
+	if (!leaf.has_space(key, value)) {
+		// Release locks. Split will acquire its own. Re-acquire lock after
+		// split by traversing to leaf again.
 		buffer_manager.unfix_page(leaf_frame, false);
-		throw std::logic_error(
-			"BTree::insert(): Node split not implemented yet.");
+		split(key, value);
+		goto restart;
 	}
 
 	auto success = leaf.insert(key, value);
-
-	if (!success) {
-		buffer_manager.unfix_page(leaf_frame, false);
-		throw std::logic_error("BTree::insert(): Key already exists.");
-	}
-
 	buffer_manager.unfix_page(leaf_frame, false);
 
-	// auto &leaf_page = get_leaf(key);
-	// auto &leaf_node = LeafNode::page_to_leaf(leaf_page.get_data());
-	// assert(!leaf_node.is_full() && "leaf_node must have enough space for new
-	// entry"); leaf_node.insert(key, value);
-	// buffer_manager.unfix_page(leaf_page, true);
+	if (!success)
+		throw std::logic_error("BTree::insert(): Key already exists.");
+}
+// -----------------------------------------------------------------
+template <LessEqualComparable KeyT, typename ValueT>
+const KeyT &BTree<KeyT, ValueT>::LeafNode::split(const KeyT &key,
+												 const ValueT &value) {
+
+	// Split.
+	assert(this->slot_count > 1);
+	uint16_t pivot_nr = (this->slot_count + 1) / 2;
+	const auto &pivot_slot = *(slots_begin() + pivot_nr);
+
+	// CONTINUE HERE.
+}
+// -----------------------------------------------------------------
+template <LessEqualComparable KeyT, typename ValueT>
+void BTree<KeyT, ValueT>::split(const KeyT &key, const ValueT &value) {
+	throw std::logic_error("BTree::split(): Node split not implemented yet.");
+
+	// No locks are held at this point.
+
+	// Traverse anew to leaf but keep all locks on the path.
+	auto *frame = &buffer_manager.fix_page(segment_id, root, true);
+	auto *node = reinterpret_cast<InnerNode *>(frame->get_data());
+	std::vector<BufferFrame *> locked_frames{};
+	locked_frames.push_back(frame);
+
+	while (!node->is_leaf()) {
+		auto page_id = node->lower_bound(key);
+		frame = &buffer_manager.fix_page(segment_id, page_id, true);
+		locked_frames.push_back(frame);
+		node = reinterpret_cast<InnerNode *>(frame->get_data());
+	}
+	auto &leaf = *reinterpret_cast<LeafNode *>(node);
+	// Another thread might have already split. Release
+	// everything and do  nothing.
+	if (leaf.has_space(key, value)) {
+		// TODO.
+	}
+	leaf.split(key, value);
+
+	// Update root pointer.
+
+	// Release all locks again.
 }
 // -----------------------------------------------------------------
 template <LessEqualComparable KeyT, typename ValueT>
@@ -116,8 +154,8 @@ BTree<KeyT, ValueT>::InnerNode::InnerNode(uint32_t page_size, uint16_t level,
 	: Node(page_size, level, 1), upper(upper) {
 	// Sanity Check: Node must fit page.
 	assert(page_size > sizeof(InnerNode));
-
-	// TODO: Insert child.
+	assert(sizeof(KeyT) <= std::numeric_limits<typeof(Slot::key_size)>::max());
+	// TODO: Insert first child.
 }
 // -----------------------------------------------------------------
 template <LessEqualComparable KeyT, typename ValueT>
@@ -137,14 +175,9 @@ PageID BTree<KeyT, ValueT>::InnerNode::lower_bound(const KeyT &key) {
 		return slot_key < key;
 	};
 
-	if (this->slot_count == 0)
-		return {};
+	auto *slot = std::lower_bound(slots_begin(), slots_end(), key, comp);
 
-	auto *slot_begin = slots_begin();
-	auto *slot_end = slot_begin + this->slot_count;
-	auto *slot = std::lower_bound(slot_begin, slot_end, key, comp);
-
-	if (slot != slot_end) {
+	if (slot != slots_end()) {
 		assert(slot->child > 0);
 		return slot->child;
 	}
@@ -161,10 +194,7 @@ BTree<KeyT, ValueT>::LeafNode::lower_bound(const KeyT &key) {
 		assert(slot.offset > 0);
 		assert(slot.key_size > 0);
 
-		// Get key from slots
-		const auto &slot_key =
-			*reinterpret_cast<KeyT *>(this->get_data() + slot.offset);
-
+		const auto &slot_key = slot.get_key(this->get_data());
 		return slot_key < key;
 	};
 
@@ -178,49 +208,54 @@ std::optional<ValueT> BTree<KeyT, ValueT>::LeafNode::lookup(const KeyT &key) {
 	if (slot == slots_end())
 		return {};
 
-	const auto &found_key =
-		*reinterpret_cast<KeyT *>(this->get_data() + slot->offset);
-	if (found_key == key)
-		return {slot->value};
+	const auto &found_key = slot->get_key(this->get_data());
+	if (found_key != key)
+		return {};
 
-	return {};
+	assert(slot->value_size);
+	return {slot->get_value(this->get_data())};
 }
 // -----------------------------------------------------------------
 template <LessEqualComparable KeyT, typename ValueT>
 bool BTree<KeyT, ValueT>::LeafNode::insert(const KeyT &key,
 										   const ValueT &value) {
-	// Sanity Check: User must ensure that there is enough space on leaf node
-	// for insertion.
-	assert(get_free_space() >= (sizeof(KeyT) + sizeof(LeafNode::Slot)));
+	// Sanity Checks
+	assert(has_space(key, value));
+	assert(sizeof(KeyT) <= std::numeric_limits<typeof(Slot::key_size)>::max());
+	assert(sizeof(ValueT) <=
+		   std::numeric_limits<typeof(Slot::value_size)>::max());
 
-	// Insert new slot.
-	auto *insert_pos = lower_bound(key);
-	if (insert_pos != slots_end()) {
-		const auto &found_key =
-			*reinterpret_cast<KeyT *>(this->get_data() + insert_pos->offset);
+	// Find insert position.
+	auto *slot_target = lower_bound(key);
+	if (slot_target != slots_end()) {
+		const auto &found_key = slot_target->get_key(this->get_data());
+		// Keys must be unique. We don't throw here because we don't manage
+		// the lock.
 		if (found_key == key)
 			return false;
 	}
 
 	// Move each slot up by one to make space for new one.
-	for (auto *slot = slots_end(); slot > insert_pos; --slot) {
+	for (auto *slot = slots_end(); slot > slot_target; --slot) {
 		auto &source_slot = *(slot - 1);
 		auto &target_slot = *(slot);
 		target_slot = source_slot;
 	}
-	this->data_start -= sizeof(KeyT);
-	assert(sizeof(KeyT) <= std::numeric_limits<uint16_t>::max());
-	*insert_pos =
-		Slot{value, this->data_start, static_cast<uint16_t>(sizeof(KeyT))};
+	// Insert new slot.
+	this->data_start -= (sizeof(KeyT) + sizeof(ValueT));
+	*slot_target = Slot{this->data_start, static_cast<uint16_t>(sizeof(KeyT)),
+						static_cast<uint16_t>(sizeof(ValueT))};
 	++this->slot_count;
 	assert(reinterpret_cast<std::byte *>(slots_end()) <=
 		   this->get_data() + this->data_start);
 
 	// Insert key.
-	KeyT &target_data =
-		*(reinterpret_cast<KeyT *>(this->get_data() + this->data_start));
+	KeyT &key_target = slot_target->get_key(this->get_data());
 	// TODO: `KeyT` must implement copy assignment.
-	target_data = key;
+	key_target = key;
+	// Insert value.
+	ValueT &value_target = slot_target->get_value(this->get_data());
+	value_target = value;
 
 	return true;
 }
