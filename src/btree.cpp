@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <deque>
 #include <iostream>
 #include <optional>
 #include <vector>
@@ -131,82 +132,100 @@ PageID BTree<KeyT, ValueT>::get_new_page() {
 // -----------------------------------------------------------------
 template <LessEqualComparable KeyT, typename ValueT>
 void BTree<KeyT, ValueT>::split(const KeyT &key) {
-	// No frames should be held at this point.
+	// No frames are to be held at this point.
+	auto *frame = &buffer_manager.fix_page(segment_id, root, true);
+	auto *curr_node = reinterpret_cast<InnerNode *>(frame->get_data());
+	std::deque<BufferFrame *> locked_path{frame};
 
-	// Traverse anew to leaf but keep all locks on the path.
-	auto page_id = root;
-	auto *frame = &buffer_manager.fix_page(segment_id, page_id, true);
-	// TODO: When multithreading, poll if this is still root at this point,
-	// when having acquired the lock.
-	auto *node = reinterpret_cast<InnerNode *>(frame->get_data());
-	std::vector<BufferFrame *> locked_nodes{frame};
-
-	while (!node->is_leaf()) {
-		page_id = node->lookup(key);
-		frame = &buffer_manager.fix_page(segment_id, page_id, true);
-		locked_nodes.push_back(frame);
-		node = reinterpret_cast<InnerNode *>(frame->get_data());
+	// Collect all nodes on path to leaf for given key.
+	while (!curr_node->is_leaf()) {
+		frame =
+			&buffer_manager.fix_page(segment_id, curr_node->lookup(key), true);
+		locked_path.push_back(frame);
+		curr_node = reinterpret_cast<InnerNode *>(frame->get_data());
 	}
+	auto height = locked_path.size();
 	// TODO: When multithreading, another thread might have already split.
 	// Release everything and do nothing in that case.
 
 	// Split Leaf.
-	auto &leaf = *reinterpret_cast<LeafNode *>(node);
-	const auto new_page_id = get_new_page();
-	auto &new_leaf_frame =
-		buffer_manager.fix_page(segment_id, new_page_id, true);
+	auto &leaf = *reinterpret_cast<LeafNode *>(curr_node);
+	const auto new_pid = get_new_page();
+	auto &new_leaf_frame = buffer_manager.fix_page(segment_id, new_pid, true);
 	auto &new_leaf = *(new (new_leaf_frame.get_data())
 						   LeafNode(buffer_manager.get_page_size()));
 	const auto *pivot = &leaf.split(new_leaf, buffer_manager.get_page_size());
+	locked_path.push_back(&new_leaf_frame);
 
-	buffer_manager.unfix_page(new_leaf_frame, true);
-	assert(!locked_nodes.empty());
+	assert(height > 0);
+	int insertion_level = height - 1; // Leaf level.
+	--insertion_level; // Insertion starts above leaf level. Can be -1.
 
-// A new pivot must be inserted into the parent.
-insert_new_pivot:
-	auto &child_frame = *locked_nodes.back();
-	locked_nodes.pop_back();
+	// Never release a page which owns this key from the path before its copied
+	// to the parent!
+	std::vector<std::pair<const KeyT *, const PageID>> insertion_queue{
+		{pivot, new_pid}};
 
-	// Arrived at root? Create new root.
-	if (locked_nodes.empty()) {
-		root = get_new_page();
-		auto &root_frame = buffer_manager.fix_page(segment_id, root, true);
-		auto &child_node =
-			*reinterpret_cast<InnerNode *>(child_frame.get_data());
-		new (root_frame.get_data())
-			InnerNode(buffer_manager.get_page_size(), child_node.level + 1);
-		locked_nodes.push_back(&root_frame);
+	// A new pivot must be inserted into the parent.
+	while (!insertion_queue.empty()) {
+		// Arrived at root? Create new root.
+		if (insertion_level < 0) {
+			auto old_root = root;
+			root = get_new_page();
+			auto &root_frame = buffer_manager.fix_page(segment_id, root, true);
+			new (root_frame.get_data())
+				InnerNode(buffer_manager.get_page_size(), height++, old_root);
+			locked_path.push_front(&root_frame);
+			insertion_level = 0;
+		}
+
+		assert(0 <= insertion_level);
+		assert(insertion_level < static_cast<int>(height));
+
+		auto &frame = *locked_path[insertion_level];
+		auto &node = *reinterpret_cast<InnerNode *>(frame.get_data());
+		assert(node.level == (height - 1 - insertion_level));
+
+		auto [new_pivot, new_child] = insertion_queue.back();
+		insertion_queue.pop_back();
+
+		// Cascarding split?
+		if (!node.has_space(*new_pivot)) {
+			// Create new node.
+			const auto newer_child = get_new_page();
+			auto &new_frame =
+				buffer_manager.fix_page(segment_id, newer_child, true);
+			auto &new_node = *(new (new_frame.get_data()) InnerNode(
+				buffer_manager.get_page_size(), node.level, node.get_upper()));
+
+			// Split.
+			const auto &newer_pivot =
+				node.split(new_node, buffer_manager.get_page_size());
+
+			// Update insertion queue.
+			insertion_queue.push_back({&newer_pivot, newer_child});
+			insertion_queue.push_back({new_pivot, new_child});
+
+			// Update lock path: New node might be on path now.
+			if (key > newer_pivot) {
+				locked_path[insertion_level] = &new_frame;
+				locked_path.push_back(&frame);
+			} else {
+				locked_path.push_back(&new_frame);
+			}
+
+			// Retry current insertion.
+			continue;
+		}
+
+		bool success = node.insert_split(*new_pivot, new_child);
+		assert(success);
+		--insertion_level;
 	}
-	// Release child. Must wait with release until here since this frame might
-	// have been the root. Cannot release the root until we have a new one.
-	buffer_manager.unfix_page(child_frame, true);
 
-	auto &parent_frame = *locked_nodes.back();
-	auto &parent_node = *reinterpret_cast<InnerNode *>(parent_frame.get_data());
-
-	// Split new parent if necessary.
-	assert(pivot);
-	if (parent_node.has_space(*pivot)) {
-		// Child pointer must be updated before inserting the new pivot.
-		parent_node.update(key, new_page_id);
-		auto success = parent_node.insert(*pivot, page_id);
-		assert(success); // TODO: Just throw.
-	} else {
-		// TODO: Make space for the pivot, then insert, then goto
-		// insert_new_pivot
-		throw std::logic_error(
-			"BTree::split(): Cascading node split not implemented yet.");
-		goto insert_new_pivot;
-	}
-
-	// Release dirty frames.
-	assert(!locked_nodes.empty());
-	locked_nodes.pop_back();
-	buffer_manager.unfix_page(parent_frame, true);
-
-	// Release rest of path of clean frames.
-	for (auto *frame : locked_nodes) {
-		buffer_manager.unfix_page(*frame, false);
+	// Release path. TODO: Don't mark all as dirty.
+	for (auto *frame : locked_path) {
+		buffer_manager.unfix_page(*frame, true);
 	}
 }
 // -----------------------------------------------------------------
@@ -333,8 +352,9 @@ size_t BTree<KeyT, ValueT>::size() {
 }
 // -----------------------------------------------------------------
 template <LessEqualComparable KeyT, typename ValueT>
-BTree<KeyT, ValueT>::InnerNode::InnerNode(uint32_t page_size, uint16_t level)
-	: Node(page_size, level) {
+BTree<KeyT, ValueT>::InnerNode::InnerNode(uint32_t page_size, uint16_t level,
+										  PageID upper)
+	: Node(page_size, level), upper(upper) {
 	// Sanity Check: Node must fit page.
 	assert(page_size > sizeof(InnerNode));
 	static_assert(sizeof(KeyT) <=
@@ -373,17 +393,112 @@ PageID BTree<KeyT, ValueT>::InnerNode::lookup(const KeyT &pivot) {
 }
 // -----------------------------------------------------------------
 template <LessEqualComparable KeyT, typename ValueT>
-bool BTree<KeyT, ValueT>::InnerNode::insert(const KeyT &pivot,
-											const PageID child) {
-	assert(has_space(pivot));
+const KeyT &BTree<KeyT, ValueT>::InnerNode::split(InnerNode &new_node,
+												  size_t page_size) {
+	// Sanity Check.
+	assert(this->slot_count > 1);
+	// Buffer the node.
+	std::vector<std::byte> buffer{page_size};
+	std::memcpy(&buffer[0], this, page_size);
+	auto *buffer_node = reinterpret_cast<InnerNode *>(&buffer[0]);
+
+	uint16_t pivot_i = (buffer_node->slot_count + 1) / 2 - 1;
+
+	// First half of slots is reinserted into left leaf to compactiy space.
+	// TODO: Make this better.
+	this->slot_count = 0;
+	this->data_start = page_size;
+	const auto *slot_to_copy = buffer_node->slots_begin();
+	while (slot_to_copy < buffer_node->slots_begin() + pivot_i + 1) {
+		auto success = insert(slot_to_copy->get_key(buffer_node->get_data()),
+							  slot_to_copy->child);
+		assert(success);
+		++slot_to_copy;
+	}
+	assert(this->slot_count == pivot_i + 1);
+
+	// Second half of slots is inserted into new, right leaf.
+	while (slot_to_copy < buffer_node->slots_end()) {
+		auto success =
+			new_node.insert(slot_to_copy->get_key(buffer_node->get_data()),
+							slot_to_copy->child);
+		assert(success);
+		++slot_to_copy;
+	}
+
+	// Set `upper` to right-most slot. Delete slot.
+	assert(this->slot_count > 0);
+	const auto &pivot_slot = *(slots_end() - 1);
+	upper = pivot_slot.child;
+	--this->slot_count;
+
+	// Returning a reference to a deleted slot. Use with care.
+	return pivot_slot.get_key(this->get_data());
+}
+// -----------------------------------------------------------------
+template <LessEqualComparable KeyT, typename ValueT>
+bool BTree<KeyT, ValueT>::InnerNode::insert_split(const KeyT &new_pivot,
+												  PageID new_child) {
+	// Sanity checks.
+	if (!has_space(new_pivot))
+		return false;
+
 	assert(upper);
 
-	auto *slot_target = lower_bound(pivot);
+	auto *slot_target = lower_bound(new_pivot);
+	PageID old_child;
+	if (slot_target == slots_end()) {
+		// Target slot is rightmost `upper`.
+		old_child = upper;
+		upper = new_child;
+		// Insert slot with <new_pivot, old_upper>
+	} else {
+		const auto &found_pivot = slot_target->get_key(this->get_data());
+		// Keys must be unique. We don't throw here because we don't manage
+		// the lock.
+		if (found_pivot == new_pivot)
+			return false;
+
+		old_child = slot_target->child;
+	}
+	slot_target->child = new_child;
+
+	// Move each slot up by one to make space for new one.
+	for (auto *slot = slots_end(); slot > slot_target; --slot) {
+		auto &source_slot = *(slot - 1);
+		auto &target_slot = *(slot);
+		target_slot = source_slot;
+	}
+	// Insert new slot.
+	this->data_start -= sizeof(KeyT);
+	*slot_target = Slot{old_child, this->data_start,
+						static_cast<uint16_t>(sizeof(new_pivot))};
+	++this->slot_count;
+	assert(reinterpret_cast<std::byte *>(slots_end()) <=
+		   this->get_data() + this->data_start);
+
+	// Insert pivot.
+	KeyT &pivot_target = slot_target->get_key(this->get_data());
+	pivot_target = new_pivot; // TODO: `KeyT` must implement copy assignment.
+
+	return true;
+}
+// -----------------------------------------------------------------
+template <LessEqualComparable KeyT, typename ValueT>
+bool BTree<KeyT, ValueT>::InnerNode::insert(const KeyT &new_pivot,
+											PageID new_child) {
+	// Sanity checks.
+	if (!has_space(new_pivot))
+		return false;
+
+	assert(upper);
+
+	auto *slot_target = lower_bound(new_pivot);
 	if (slot_target != slots_end()) {
 		const auto &found_pivot = slot_target->get_key(this->get_data());
 		// Keys must be unique. We don't throw here because we don't manage
 		// the lock.
-		if (found_pivot == pivot)
+		if (found_pivot == new_pivot)
 			return false;
 	}
 
@@ -394,32 +509,18 @@ bool BTree<KeyT, ValueT>::InnerNode::insert(const KeyT &pivot,
 		target_slot = source_slot;
 	}
 	// Insert new slot.
-	this->data_start -= (sizeof(KeyT) + sizeof(ValueT));
-	*slot_target =
-		Slot{child, this->data_start, static_cast<uint16_t>(sizeof(KeyT))};
+	this->data_start -= sizeof(KeyT);
+	*slot_target = Slot{new_child, this->data_start,
+						static_cast<uint16_t>(sizeof(new_pivot))};
 	++this->slot_count;
 	assert(reinterpret_cast<std::byte *>(slots_end()) <=
 		   this->get_data() + this->data_start);
 
 	// Insert pivot.
 	KeyT &pivot_target = slot_target->get_key(this->get_data());
-	// TODO: `KeyT` must implement copy assignment.
-	pivot_target = pivot;
+	pivot_target = new_pivot; // TODO: `KeyT` must implement copy assignment.
 
 	return true;
-}
-// -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
-void BTree<KeyT, ValueT>::InnerNode::update(const KeyT &pivot,
-											const PageID child) {
-	auto *slot = lower_bound(pivot);
-
-	if (slot == slots_end()) {
-		upper = child;
-		return;
-	}
-
-	slot->child = child;
 }
 // -----------------------------------------------------------------
 template <LessEqualComparable KeyT, typename ValueT>
@@ -459,7 +560,6 @@ template <LessEqualComparable KeyT, typename ValueT>
 const KeyT &BTree<KeyT, ValueT>::LeafNode::split(LeafNode &new_node,
 												 size_t page_size) {
 
-	// Split.
 	assert(this->slot_count > 1);
 	assert(page_size > 0);
 	// Buffer the node.

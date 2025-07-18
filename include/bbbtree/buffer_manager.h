@@ -27,8 +27,8 @@ class BufferFrame {
 	char *const data;
 	/// The state of the page. Undefined by default.
 	State state = State::UNDEFINED;
-	/// Whether the page is currently fixed.
-	bool in_use = false;
+	/// How many use the page currently.
+	size_t in_use_by = 0;
 
 	friend class BufferManager;
 

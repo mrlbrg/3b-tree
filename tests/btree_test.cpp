@@ -15,8 +15,8 @@ using Key = uint64_t;
 using Value = uint64_t;
 
 static const constexpr size_t BTREE_SEGMENT_ID = 834;
-static const constexpr size_t TEST_PAGE_SIZE = 1024;
-static const constexpr size_t TEST_NUM_PAGES = 3;
+static const constexpr size_t TEST_PAGE_SIZE = 1024 / 4;
+static const constexpr size_t TEST_NUM_PAGES = 10;
 const uint64_t TUPLES_PER_LEAF =
 	(TEST_PAGE_SIZE - sizeof(BTree<Key, Value>::LeafNode)) /
 	(sizeof(BTree<Key, Value>::LeafNode::Slot) + sizeof(Key) + sizeof(Value));

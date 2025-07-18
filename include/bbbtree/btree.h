@@ -108,7 +108,7 @@ struct BTree final : public Segment {
 		/// Default Constructor.
 		InnerNode() = delete;
 		/// Constructor. Used when needing a new node for a node split.
-		InnerNode(uint32_t page_size, uint16_t level);
+		InnerNode(uint32_t page_size, uint16_t level, PageID upper);
 
 		/// Returns true if this leaf has enough space for the given key/value
 		/// pair.
@@ -124,15 +124,16 @@ struct BTree final : public Segment {
 		/// Splits the node in two.
 		/// TODO: Set upper correctly when splitting/creating a new root.
 		/// When splitting, upper of old page must get page id of pivot slot.
-		[[nodiscard]] const KeyT &split(InnerNode &new_node);
+		/// Returns reference to uppermost key on left node, therefore this node
+		/// must not be released while the returned key is used. Otherwise we
+		/// have a dangling reference.
+		const KeyT &split(InnerNode &new_node, size_t page_size);
 
-		/// Updates the pivot of a split child. Must be called before
-		/// inserting the new pivot that resulted from the split.
-		void update(const KeyT &pivot, const PageID child);
-
-		/// Inserts a new pivot/child pair resulting from a split. Pivot must be
-		/// unique. Must have enough space. Returns true if key was inserted.
-		[[nodiscard]] bool insert(const KeyT &pivot, const PageID child);
+		/// Inserts a new pivot/child pair resulting from a split.
+		/// Pivot must be unique. Must have enough space.
+		/// Returns true if key was inserted successfully. False otherwise.
+		[[nodiscard]] bool insert_split(const KeyT &new_pivot,
+										PageID new_child);
 
 		/// Returns all children of this node.
 		std::vector<PageID> get_children();
@@ -152,6 +153,9 @@ struct BTree final : public Segment {
 		/// pivot. Returns pointer to `slots_end` if no such slot is found.
 		/// Caller then must usually handle the `upper` of the node.
 		Slot *lower_bound(const KeyT &pivot);
+
+		/// Insert a new slot.
+		[[nodiscard]] bool insert(const KeyT &pivot, PageID child);
 
 		/// Get begin of slots section.
 		Slot *slots_begin() {
@@ -289,8 +293,9 @@ struct BTree final : public Segment {
 	/// Read and written out at construction/destruction time.
 
 	/// The page of the current root.
-	/// Important: Whenever someone tries to acquire a lock on this page,
-	/// make sure after acquisition that this page is still the root.
+	/// Important TODO: When multithreading, whenever someone tries to acquire a
+	/// lock on this page, make sure after acquisition that this page is still
+	/// the root.
 	PageID root;
 	/// The next free, unique page ID.
 	PageID next_free_page;

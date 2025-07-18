@@ -10,7 +10,7 @@ namespace bbbtree {
 // ----------------------------------------------------------------
 void BufferManager::reset(BufferFrame &frame) {
 	frame.state = State::UNDEFINED;
-	assert(!frame.in_use);
+	assert(!frame.in_use_by);
 }
 // ----------------------------------------------------------------
 void BufferManager::unload(BufferFrame &frame) {
@@ -77,7 +77,7 @@ BufferManager::BufferManager(size_t page_size, size_t page_count)
 BufferManager::~BufferManager() {
 	for (auto &frame : page_frames) {
 		// Make sure all pages were unfixed again.
-		assert(!frame.in_use);
+		assert(frame.in_use_by == 0);
 		// TODO: Must also be written when page is new.
 		if (frame.state == State::DIRTY)
 			unload(frame);
@@ -95,29 +95,29 @@ BufferFrame &BufferManager::fix_page(SegmentID segment_id, PageID page_id,
 	if (frame_it != id_to_frame.end()) {
 		// TODO: Already used by someone else?
 		auto &frame = frame_it->second;
-		frame->in_use = true;
+		++(frame->in_use_by);
 		return *(frame_it->second);
 	}
 
 	// Load page into buffer
 	auto &frame = get_free_frame();
+	assert(frame.in_use_by == 0);
 	id_to_frame[segment_page_id] = &frame;
 	load(frame, segment_id, page_id);
-	frame.in_use = true;
+	frame.in_use_by = 1;
 
 	return frame;
 }
 // -----------------------------------------------------------------
 void BufferManager::unfix_page(BufferFrame &frame, bool is_dirty) {
-	// Sanity check
-	assert(frame.in_use);
 	// TODO: Check if is_dirty, lock must have been exclusive.
+	assert(frame.in_use_by > 0);
 
 	if (is_dirty)
 		frame.state = State::DIRTY;
 	// TODO: When we have several readers, we do not want to set this so false.
 	// Somebody else might still be using this.
-	frame.in_use = false;
+	--frame.in_use_by;
 }
 // ----------------------------------------------------------------
 bool BufferManager::evict() {
@@ -127,7 +127,7 @@ bool BufferManager::evict() {
 	uint8_t num_frames_tested = 0;
 
 	// Find a page that is not in use from there.
-	while (frame->in_use) {
+	while (frame->in_use_by) {
 		// Stop when having scanned all frames already.
 		++num_frames_tested;
 		if (num_frames_tested == page_frames.size())
@@ -149,7 +149,7 @@ bool BufferManager::evict() {
 		unload(*frame);
 
 	// Free the frame from ownership.
-	assert(!frame->in_use);
+	assert(!frame->in_use_by);
 	frame->state = State::UNDEFINED;
 	free_buffer_frames.emplace_back(frame);
 
