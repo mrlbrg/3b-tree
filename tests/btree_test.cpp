@@ -17,6 +17,12 @@ using Value = uint64_t;
 static const constexpr size_t BTREE_SEGMENT_ID = 834;
 static const constexpr size_t TEST_PAGE_SIZE = 1024;
 static const constexpr size_t TEST_NUM_PAGES = 3;
+const uint64_t TUPLES_PER_LEAF =
+	(TEST_PAGE_SIZE - sizeof(BTree<Key, Value>::LeafNode)) /
+	(sizeof(BTree<Key, Value>::LeafNode::Slot) + sizeof(Key) + sizeof(Value));
+const uint64_t TUPLES_PER_NODE =
+	(TEST_PAGE_SIZE - sizeof(BTree<Key, Value>::InnerNode)) /
+	(sizeof(BTree<Key, Value>::InnerNode::Slot) + sizeof(Key) + sizeof(Value));
 
 class BTreeTest : public ::testing::Test {
   protected:
@@ -53,6 +59,7 @@ class BTreeTest : public ::testing::Test {
 			if (expected_map.count(key) == 0) {
 				btree_->insert(key, value);
 				expected_map[key] = value;
+				EXPECT_EQ(expected_map.size(), btree_->size());
 			}
 		}
 
@@ -107,17 +114,31 @@ TEST_F(BTreeTest, Persistency) {
 	EXPECT_EQ(btree_->lookup(1), 2);
 }
 /// A Tree can grow beyond a single node.
-TEST_F(BTreeTest, NodeSplit) {
-	// Number of tuples requires to force a node split.
-	const uint64_t max_tuples_per_leaf =
-		TEST_PAGE_SIZE / (sizeof(Key) + sizeof(Value));
+TEST_F(BTreeTest, LeafSplits) {
+	// Force a leaf split during inserts.
+	auto expected_values = Seed(TUPLES_PER_LEAF * 5);
 
-	// Force a node split during inserts.
-	auto expected_values = Seed(max_tuples_per_leaf * 2);
+	ASSERT_EQ(btree_->size(), expected_values.size());
 
 	// Lookup all values.
 	for (auto &[k, v] : expected_values) {
-		EXPECT_EQ(btree_->lookup(k), v);
+		auto res = btree_->lookup(k);
+		ASSERT_TRUE(res.has_value());
+		EXPECT_EQ(res.value(), v);
+	}
+}
+/// A tree can grow beyond one level.
+TEST_F(BTreeTest, InnerNodeSplits) {
+	auto num_tuples = TUPLES_PER_LEAF * TUPLES_PER_NODE * 2;
+	auto expected_values = Seed(num_tuples);
+
+	ASSERT_EQ(btree_->size(), expected_values.size());
+
+	// Lookup all values.
+	for (auto &[k, v] : expected_values) {
+		auto res = btree_->lookup(k);
+		ASSERT_TRUE(res.has_value());
+		EXPECT_EQ(res.value(), v);
 	}
 }
 /// Search of an empty node works as expected.

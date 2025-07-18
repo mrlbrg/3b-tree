@@ -5,11 +5,13 @@
 #include "bbbtree/types.h"
 
 #include <cassert>
+#include <cstdint>
 #include <optional>
+#include <vector>
 
-// TODO: We must support variable sized values as well, not only variable sized
-// keys Since we want to support a Delta-BTree later, which does not hold TIDs
-// as values but a whole update/tuple.
+// TODO: We currently do not persist state through the buffer manager while
+// running the B-Tree. We only persist the state on destruction. Might want to
+// maintain state through the buffer manager during runtime though.
 
 namespace bbbtree {
 /// Requirements for the keys of the tree. TODO.
@@ -33,14 +35,6 @@ concept LessEqualComparable = requires(T a, T b) {
 /// later.
 template <LessEqualComparable KeyT, typename ValueT>
 struct BTree final : public Segment {
-	/// A header that keeps track of the metadata. Always located at page 0 of
-	/// this segment. Read and written out to at construction and destruction
-	/// time of the B-Tree.
-	struct Header {
-		PageID root_page;
-		PageID next_free_page;
-	};
-
 	/// Header of a generic tree node. Always consists of a header, a slot
 	/// section and the data section.
 	struct Node {
@@ -52,8 +46,8 @@ struct BTree final : public Segment {
 		uint16_t slot_count;
 
 		/// Constructor.
-		Node(uint32_t page_size, uint16_t level, uint16_t slot_count = 0)
-			: data_start(page_size), level(level), slot_count(slot_count) {}
+		Node(uint32_t page_size, uint16_t level)
+			: data_start(page_size), level(level), slot_count(0) {}
 
 		/// Is the node a leaf node?
 		bool is_leaf() const { return level == 0; }
@@ -76,15 +70,17 @@ struct BTree final : public Segment {
 	};
 
 	/// Specialization of a node that is internal, not a leaf. Its entries are
-	/// keys pivoting to other nodes. Entries are <KeyT, PageID>. They always
-	/// start out with at least two children, since they are only created upon
-	/// node splits.
+	/// keys pivoting to other nodes. Entries are <KeyT, PageID>. They are
+	/// created upon node splits.
 	struct InnerNode final : public Node {
 		/// Indicates the position and length of the key within the page.
 		/// Contains the key's corresponding child (PageID).
 		struct Slot {
 			/// Default Constructor.
 			Slot() = delete;
+			/// Constructor.
+			Slot(PageID child, uint32_t offset, uint16_t key_size)
+				: child(child), offset(offset), key_size(key_size) {}
 			/// The child of the pivot.
 			PageID child;
 			/// The offset within the page.
@@ -93,32 +89,69 @@ struct BTree final : public Segment {
 			uint16_t key_size;
 			/// The number of bytes from end of key to end of entry.
 			/// TODO: Add padding to ensure memory alignment for keys as well.
-			uint16_t padding;
+			uint16_t padding{0};
+
+			/// Returns a const reference to the key this slot is pointing to.
+			const KeyT &get_key(const std::byte *begin) const {
+				assert(key_size);
+				return *reinterpret_cast<const KeyT *>(begin + offset);
+			}
+
+			/// Returns a const reference to the key this slot is pointing to.
+			KeyT &get_key(std::byte *begin) {
+				assert(key_size);
+				return *reinterpret_cast<KeyT *>(begin + offset);
+			}
 		};
 
 	  public:
 		/// Default Constructor.
 		InnerNode() = delete;
-		/// Constructor.
-		InnerNode(uint32_t page_size, uint16_t level, PageID first_child,
-				  PageID upper);
+		/// Constructor. Used when needing a new node for a node split.
+		InnerNode(uint32_t page_size, uint16_t level);
 
 		/// Returns true if this leaf has enough space for the given key/value
 		/// pair.
-		bool has_space(const KeyT &key) {
-			return get_free_space() >= (sizeof(key) + sizeof(Slot));
+		bool has_space(const KeyT &pivot) {
+			return get_free_space() >= (sizeof(pivot) + sizeof(Slot));
 		}
 
-		/// Returns the appropriate PageID for a given key.
-		/// Returns `upper` if all keys are smaller.
-		PageID lower_bound(const KeyT &key);
+		/// Returns the appropriate child pointer for a given pivot.
+		/// Returns `upper` if all pivots are smaller and `upper` is a valid
+		/// page. Returns nullopt if `upper` is not initialized.
+		PageID lookup(const KeyT &pivot);
 
-		[[nodiscard]] const KeyT &split(const KeyT &key, const ValueT &value);
+		/// Splits the node in two.
+		/// TODO: Set upper correctly when splitting/creating a new root.
+		/// When splitting, upper of old page must get page id of pivot slot.
+		[[nodiscard]] const KeyT &split(InnerNode &new_node);
+
+		/// Updates the pivot of a split child. Must be called before
+		/// inserting the new pivot that resulted from the split.
+		void update(const KeyT &pivot, const PageID child);
+
+		/// Inserts a new pivot/child pair resulting from a split. Pivot must be
+		/// unique. Must have enough space. Returns true if key was inserted.
+		[[nodiscard]] bool insert(const KeyT &pivot, const PageID child);
+
+		/// Returns all children of this node.
+		std::vector<PageID> get_children();
+
+		/// Return the right-most child of this node.
+		PageID get_upper() { return upper; }
+
+		/// Print to standard output.
+		void print();
 
 	  private:
 		/// Right-most child. Pivot for all keys bigger than the biggest pivot.
-		/// Must be set lazily upon retrieval. Zero is invalid.
+		/// Must be set during node splitting. Zero is invalid.
 		PageID upper;
+
+		/// Returns the first slot whose key is not smaller than the given
+		/// pivot. Returns pointer to `slots_end` if no such slot is found.
+		/// Caller then must usually handle the `upper` of the node.
+		Slot *lower_bound(const KeyT &pivot);
 
 		/// Get begin of slots section.
 		Slot *slots_begin() {
@@ -126,9 +159,7 @@ struct BTree final : public Segment {
 											sizeof(InnerNode));
 		}
 		/// Get end of slots section.
-		Slot *slots_end() {
-			return slots_begin() + this->slot_count * sizeof(Slot);
-		}
+		Slot *slots_end() { return slots_begin() + this->slot_count; }
 
 		/// Get free space in bytes. Equals the space between the header + slots
 		/// and data section.
@@ -199,15 +230,20 @@ struct BTree final : public Segment {
 		/// Inserts a key, value pair into this leaf. Returns true if key was
 		/// actually inserted. Returns false if key already exists. Caller must
 		/// ensure that there is enough space.
-		bool insert(const KeyT &key, const ValueT &value);
+		[[nodiscard]] bool insert(const KeyT &key, const ValueT &value);
 
 		/// Splits the leaf and returns the new pivot key for the parent.
-		[[nodiscard]] const KeyT &split(const KeyT &key, const ValueT &value);
+		[[nodiscard]] const KeyT &split(LeafNode &new_node, size_t page_size);
+
+		/// Print leaf to standard output.
+		void print();
 
 	  private:
 		/// Get free space in bytes. Equals the space between the header + slots
 		/// and data section.
 		size_t get_free_space() {
+			assert(this->data_start >=
+				   (sizeof(LeafNode) + this->slot_count * sizeof(Slot)));
 			return this->data_start - sizeof(LeafNode) -
 				   this->slot_count * sizeof(Slot);
 		};
@@ -215,12 +251,12 @@ struct BTree final : public Segment {
 		/// If no such key is found, returns pointer to end of slot section.
 		Slot *lower_bound(const KeyT &key);
 
-		/// Get start of slots section.
+		/// Get beginning of slots section.
 		Slot *slots_begin() {
 			return reinterpret_cast<Slot *>(this->get_data() +
 											sizeof(LeafNode));
 		}
-		/// get end of slots section.
+		/// Get end of slots section.
 		Slot *slots_end() { return slots_begin() + this->slot_count; }
 	};
 
@@ -230,7 +266,7 @@ struct BTree final : public Segment {
 	/// Destructor.
 	~BTree();
 
-	/// Lookup an entry in the tree.
+	/// Lookup an entry in the tree. Returns `nullopt` if key was not found.
 	std::optional<ValueT> lookup(const KeyT &key);
 
 	/// Erase an entry in the tree.
@@ -239,8 +275,22 @@ struct BTree final : public Segment {
 	/// Inserts a new entry into the tree.
 	void insert(const KeyT &key, const ValueT &value);
 
+	/// Print tree. Not thread-safe.
+	void print();
+
+	/// Returns the number of key/value pairs stored in the tree.
+	/// Do not use for production, only for testing. Traverses whole tree.
+	/// Not thread-safe.
+	size_t size();
+
   private:
+	/// TODO: Find a more elegant solution for persistency:
+	/// State is persisted at page 0 of this segment.
+	/// Read and written out at construction/destruction time.
+
 	/// The page of the current root.
+	/// Important: Whenever someone tries to acquire a lock on this page,
+	/// make sure after acquisition that this page is still the root.
 	PageID root;
 	/// The next free, unique page ID.
 	PageID next_free_page;
@@ -252,6 +302,8 @@ struct BTree final : public Segment {
 	/// Traverses tree for given key and splits corresponding leaf.
 	/// Only splits if leaf is full. Another thread might have triggered split
 	/// already. Holds all locks on the path for cascading splits.
-	void split(const KeyT &key, const ValueT &value);
+	void split(const KeyT &key);
+
+	PageID get_new_page();
 };
 } // namespace bbbtree
