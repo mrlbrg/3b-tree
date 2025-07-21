@@ -13,6 +13,7 @@ set(
     src/segment.cpp
     src/slotted_page.cpp
     src/btree.cpp
+    src/stats.cpp
 )
 if(UNIX)
     set(SRC_CC ${SRC_CC} src/file/posix_file.cc)

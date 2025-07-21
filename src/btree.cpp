@@ -1,5 +1,6 @@
 #include "bbbtree/btree.h"
 #include "bbbtree/buffer_manager.h"
+#include "bbbtree/stats.h"
 #include "bbbtree/types.h"
 
 #include <algorithm>
@@ -352,6 +353,15 @@ size_t BTree<KeyT, ValueT>::size() {
 }
 // -----------------------------------------------------------------
 template <LessEqualComparable KeyT, typename ValueT>
+size_t BTree<KeyT, ValueT>::height() {
+	auto &frame = buffer_manager.fix_page(segment_id, root, false);
+	auto &root_node = *reinterpret_cast<InnerNode *>(frame.get_data());
+	size_t height = root_node.level + 1;
+	buffer_manager.unfix_page(frame, false);
+	return height;
+}
+// -----------------------------------------------------------------
+template <LessEqualComparable KeyT, typename ValueT>
 BTree<KeyT, ValueT>::InnerNode::InnerNode(uint32_t page_size, uint16_t level,
 										  PageID upper)
 	: Node(page_size, level), upper(upper) {
@@ -395,6 +405,7 @@ PageID BTree<KeyT, ValueT>::InnerNode::lookup(const KeyT &pivot) {
 template <LessEqualComparable KeyT, typename ValueT>
 const KeyT &BTree<KeyT, ValueT>::InnerNode::split(InnerNode &new_node,
 												  size_t page_size) {
+	++stats.inner_node_splits;
 	// Sanity Check.
 	assert(this->slot_count > 1);
 	// Buffer the node.
@@ -560,6 +571,7 @@ template <LessEqualComparable KeyT, typename ValueT>
 const KeyT &BTree<KeyT, ValueT>::LeafNode::split(LeafNode &new_node,
 												 size_t page_size) {
 
+	++stats.leaf_node_splits;
 	assert(this->slot_count > 1);
 	assert(page_size > 0);
 	// Buffer the node.

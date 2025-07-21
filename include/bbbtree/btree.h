@@ -28,6 +28,8 @@ concept LessEqualComparable = requires(T a, T b) {
 /// within a tree node.
 /// Keys and Values cannot be bigger than 64 KB (Slots have 16 bits for the size
 /// of each).
+/// TODO: Later we want to store deltas in a BTree too, therefore we need to
+/// template on a variable-sized `ValueT`.
 /// TODO: Single threaded for now.
 /// TODO: Does not implement delete yet. When deleting keys, we do not
 /// re-use/compactify the space nor merge nodes. We leave nodes fragmented.
@@ -286,6 +288,10 @@ struct BTree final : public Segment {
 	/// Do not use for production, only for testing. Traverses whole tree.
 	/// Not thread-safe.
 	size_t size();
+
+	/// Returns the number of levels in the tree.
+	/// Not thread-safe.
+	size_t height();
 
   private:
 	/// TODO: Find a more elegant solution for persistency:

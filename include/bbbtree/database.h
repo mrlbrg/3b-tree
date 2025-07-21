@@ -124,7 +124,7 @@ template <typename IndexT> Tuple Database<IndexT>::get(Tuple::Key key) {
 	return tuple;
 }
 // -----------------------------------------------------------------
-template <typename IndexT> void Database<IndexT>::erase(Tuple::Key key) {
+template <typename IndexT> void Database<IndexT>::erase(Tuple::Key /*key*/) {
 	// TODO
 	throw std::logic_error("Database<IndexT>::erase(): Not implemented yet.");
 }

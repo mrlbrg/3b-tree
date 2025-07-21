@@ -96,7 +96,7 @@ TEST_F(DatabaseTest, OutOfMemory) {
 }
 // A tuple inserted can be read again, also after destroying the database.
 TEST_F(DatabaseTest, Persistency) {
-	// Calculate the number of tuples that overflow  the buffer.
+	// Calculate the number of tuples that overflow the buffer.
 	const size_t num_tuples =
 		TEST_PAGE_SIZE * TEST_NUM_PAGES / sizeof(Tuple) * 2;
 

@@ -1,5 +1,6 @@
 #include "bbbtree/btree.h"
 #include "bbbtree/buffer_manager.h"
+#include "bbbtree/stats.h"
 
 #include <cstddef>
 #include <gtest/gtest.h>
@@ -15,7 +16,7 @@ using Key = uint64_t;
 using Value = uint64_t;
 
 static const constexpr size_t BTREE_SEGMENT_ID = 834;
-static const constexpr size_t TEST_PAGE_SIZE = 1024 / 4;
+static const constexpr size_t TEST_PAGE_SIZE = 256;
 static const constexpr size_t TEST_NUM_PAGES = 10;
 const uint64_t TUPLES_PER_LEAF =
 	(TEST_PAGE_SIZE - sizeof(BTree<Key, Value>::LeafNode)) /
@@ -26,14 +27,14 @@ const uint64_t TUPLES_PER_NODE =
 
 class BTreeTest : public ::testing::Test {
   protected:
-	void Destroy(bool reset) {
+	void Reset(bool reset_files) {
 		// Destroy B-Tree. Uses the buffer manager to persist state.
 		btree_ = nullptr;
 		// Destroy & create buffer manager.
 		buffer_manager_ =
 			std::make_unique<BufferManager>(TEST_PAGE_SIZE, TEST_NUM_PAGES);
 		// Deletes B-Tree state.
-		if (reset)
+		if (reset_files)
 			buffer_manager_->reset(BTREE_SEGMENT_ID);
 		// Destroy & create new B-Tree.
 		btree_ = std::make_unique<BTree<uint64_t, uint64_t>>(BTREE_SEGMENT_ID,
@@ -41,9 +42,12 @@ class BTreeTest : public ::testing::Test {
 	}
 
 	// Create a blank B-Tree.
-	void SetUp() override { Destroy(true); }
+	void SetUp() override {
+		Reset(true);
+		stats = Stats{};
+	}
 
-	void TearDown() override {}
+	void TearDown() override { std::cout << stats; }
 
 	std::unordered_map<Key, Value> Seed(size_t num_tuples) {
 		std::unordered_map<Key, Value> expected_map;
@@ -106,7 +110,7 @@ TEST_F(BTreeTest, Persistency) {
 	EXPECT_EQ(btree_->lookup(1), 2);
 
 	// Destroy B-Tree but persist state on disk.
-	Destroy(false);
+	Reset(false);
 
 	// New B-Tree should pick up previous state.
 	EXPECT_EQ(btree_->lookup(3), 4);
@@ -129,7 +133,7 @@ TEST_F(BTreeTest, LeafSplits) {
 }
 /// A tree can grow beyond one level.
 TEST_F(BTreeTest, InnerNodeSplits) {
-	auto num_tuples = TUPLES_PER_LEAF * TUPLES_PER_NODE * 2;
+	auto num_tuples = TUPLES_PER_LEAF * TUPLES_PER_NODE * TUPLES_PER_NODE * 2;
 	auto expected_values = Seed(num_tuples);
 
 	ASSERT_EQ(btree_->size(), expected_values.size());
