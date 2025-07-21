@@ -6,8 +6,8 @@
 
 namespace bbbtree {
 // -----------------------------------------------------------------
-template <typename IndexT>
-Database<IndexT>::Database(size_t page_size, size_t num_pages, bool reset)
+template <template <typename, typename> typename IndexT, typename KeyT>
+Database<IndexT, KeyT>::Database(size_t page_size, size_t num_pages, bool reset)
 	: buffer_manager(page_size, num_pages, reset),
 	  space_inventory(FSI_SEGMENT_ID, buffer_manager),
 	  records(SP_SEGMENT_ID, buffer_manager, space_inventory),
@@ -15,7 +15,8 @@ Database<IndexT>::Database(size_t page_size, size_t num_pages, bool reset)
 	index.print();
 }
 // -----------------------------------------------------------------
-template <typename IndexT> void Database<IndexT>::insert(const Tuple &tuple) {
+template <template <typename, typename> typename IndexT, typename KeyT>
+void Database<IndexT, KeyT>::insert(const Tuple &tuple) {
 	// Get a new TID
 	auto tid = records.allocate(sizeof(tuple));
 	// Add TID to index
@@ -30,14 +31,15 @@ template <typename IndexT> void Database<IndexT>::insert(const Tuple &tuple) {
 				  sizeof(tuple));
 }
 // -----------------------------------------------------------------
-template <typename IndexT>
-void Database<IndexT>::insert(const std::vector<Tuple> &tuples) {
+template <template <typename, typename> typename IndexT, typename KeyT>
+void Database<IndexT, KeyT>::insert(const std::vector<Tuple> &tuples) {
 	// TODO: Detect sequential inserts?
 	for (auto &tuple : tuples)
 		insert(tuple);
 }
 // -----------------------------------------------------------------
-template <typename IndexT> Tuple Database<IndexT>::get(const Tuple::Key &key) {
+template <template <typename, typename> typename IndexT, typename KeyT>
+Database<IndexT, KeyT>::Tuple Database<IndexT, KeyT>::get(const KeyT &key) {
 	// Get TID for key
 	auto maybe_tid = index.lookup(key);
 	if (!maybe_tid.has_value())
@@ -55,13 +57,13 @@ template <typename IndexT> Tuple Database<IndexT>::get(const Tuple::Key &key) {
 	return tuple;
 }
 // -----------------------------------------------------------------
-template <typename IndexT>
-void Database<IndexT>::erase(const Tuple::Key & /*key*/) {
+template <template <typename, typename> typename IndexT, typename KeyT>
+void Database<IndexT, KeyT>::erase(const KeyT & /*key*/) {
 	// TODO
 	throw std::logic_error("Database<IndexT>::erase(): Not implemented yet.");
 }
 // -----------------------------------------------------------------
 // Explicit instantiations
-// template class Database<std::unordered_map<Tuple::Key, TID>>;
-template class Database<BTree<Tuple::Key, TID>>;
+// template class Database<std::unordered_map, uint64_t>;
+template class Database<BTree, uint64_t>;
 } // namespace bbbtree

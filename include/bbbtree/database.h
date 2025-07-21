@@ -10,6 +10,8 @@
 // TODO: Rethink `logic_errors` and which error makes more sense to throw.
 
 namespace bbbtree {
+// We use only a single type of value for this database.
+using ValueT = uint64_t;
 // Buffer Configs
 static const constexpr size_t PAGE_SIZE = 1024;
 static const constexpr size_t NUM_PAGES = 10;
@@ -17,21 +19,6 @@ static const constexpr size_t NUM_PAGES = 10;
 static const constexpr SegmentID FSI_SEGMENT_ID = 0;
 static const constexpr SegmentID SP_SEGMENT_ID = 1;
 static const constexpr SegmentID INDEX_SEGMENT_ID = 2;
-
-/// A Tuple with key and value that are stored in the database.
-/// TODO: Make keys variable-sized.
-struct Tuple {
-	using Key = uint64_t;
-	using Value = uint64_t;
-
-	Key key;
-	Value value;
-
-	/// Equality operator.
-	bool operator==(const Tuple &other) const {
-		return key == other.key && value == other.value;
-	}
-};
 
 /// A concept that requires some member functions for an index.
 // template <typename IndexT>
@@ -45,8 +32,21 @@ struct Tuple {
 /// A Database maintains a single table of keys and values. The schema is
 /// fixated at compile-time. It is templated on its access path to tuples
 /// identified through their keys.
-template <typename IndexT> class Database {
+template <template <typename, typename> typename IndexT, typename KeyT>
+class Database {
   public:
+	/// A Tuple with key and value that are stored in the database.
+	/// TODO: Make keys variable-sized.
+	struct Tuple {
+		KeyT key;
+		ValueT value;
+
+		/// Equality operator.
+		bool operator==(const Tuple &other) const {
+			return key == other.key && value == other.value;
+		}
+	};
+
 	/// Constructor.
 	Database(size_t page_size = PAGE_SIZE, size_t num_pages = NUM_PAGES,
 			 bool reset = false);
@@ -58,10 +58,10 @@ template <typename IndexT> class Database {
 	/// Tuple keys must not be already present in database.
 	void insert(const std::vector<Tuple> &tuples);
 	/// Reads a value by key from the database.
-	Tuple get(const Tuple::Key &key);
+	Tuple get(const KeyT &key);
 	/// Deletes a tuple by key from the database.
 	/// TODO: Implement erase.
-	void erase(const Tuple::Key &key);
+	void erase(const KeyT &key);
 	/// Returns the number of tuples stored in the database.
 	size_t size() { return index.size(); }
 
@@ -75,7 +75,7 @@ template <typename IndexT> class Database {
 	/// The Slotted Pages segment.
 	SPSegment records;
 	/// The access path. Maps keys to their tuple IDs (`TID`).
-	IndexT index;
+	IndexT<KeyT, TID> index;
 };
 
 } // namespace bbbtree
