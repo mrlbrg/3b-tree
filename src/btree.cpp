@@ -42,8 +42,8 @@ BTree<KeyT, ValueT>::BTree(SegmentID segment_id, BufferManager &buffer_manager)
 template <LessEqualComparable KeyT, typename ValueT>
 BTree<KeyT, ValueT>::~BTree() {
 	// Write out all meta-data needed to pick up index again later.
-	// Caller must make sure that Buffer Manager is destroyed after this, not
-	// before.
+	// Caller must make sure that Buffer Manager is destroyed after this,
+	// not before.
 	auto &frame = buffer_manager.fix_page(segment_id, 0, true);
 	auto &state = *(reinterpret_cast<BTree<KeyT, ValueT> *>(frame.get_data()));
 	state.root = root;
@@ -96,7 +96,7 @@ BufferFrame &BTree<KeyT, ValueT>::get_leaf(const KeyT &key, bool exclusive) {
 }
 // -----------------------------------------------------------------
 template <LessEqualComparable KeyT, typename ValueT>
-void BTree<KeyT, ValueT>::insert(const KeyT &key, const ValueT &value) {
+bool BTree<KeyT, ValueT>::insert(const KeyT &key, const ValueT &value) {
 restart:
 	// TODO: This frame is not locked exclusively.
 	auto &leaf_frame = get_leaf(key, true);
@@ -115,10 +115,12 @@ restart:
 	buffer_manager.unfix_page(leaf_frame, true);
 
 	if (!success)
-		throw std::logic_error("BTree::insert(): Key already exists.");
+		return false;
 
 	assert(lookup(key).has_value());
 	assert(lookup(key).value() == value);
+
+	return true;
 }
 // -----------------------------------------------------------------
 template <LessEqualComparable KeyT, typename ValueT>
@@ -451,8 +453,7 @@ template <LessEqualComparable KeyT, typename ValueT>
 bool BTree<KeyT, ValueT>::InnerNode::insert_split(const KeyT &new_pivot,
 												  PageID new_child) {
 	// Sanity checks.
-	if (!has_space(new_pivot))
-		return false;
+	assert(has_space(new_pivot));
 
 	assert(upper);
 
@@ -499,8 +500,7 @@ template <LessEqualComparable KeyT, typename ValueT>
 bool BTree<KeyT, ValueT>::InnerNode::insert(const KeyT &new_pivot,
 											PageID new_child) {
 	// Sanity checks.
-	if (!has_space(new_pivot))
-		return false;
+	assert(has_space(new_pivot));
 
 	assert(upper);
 
@@ -645,6 +645,7 @@ std::optional<ValueT> BTree<KeyT, ValueT>::LeafNode::lookup(const KeyT &key) {
 template <LessEqualComparable KeyT, typename ValueT>
 bool BTree<KeyT, ValueT>::LeafNode::insert(const KeyT &key,
 										   const ValueT &value) {
+	assert(has_space(key, value));
 	// Find insert position.
 	auto *slot_target = lower_bound(key);
 	if (slot_target != slots_end()) {
@@ -707,5 +708,6 @@ void BTree<KeyT, ValueT>::LeafNode::print() {
 // -----------------------------------------------------------------
 // Explicit instantiations
 template struct BTree<uint64_t, uint64_t>;
+template struct BTree<uint64_t, TID>;
 // -----------------------------------------------------------------
 } // namespace bbbtree

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <iostream>
 
+namespace bbbtree {
 struct Stats;
 
 std::ostream &operator<<(std::ostream &os, const Stats &stats);
@@ -13,3 +14,4 @@ struct Stats {
 };
 
 extern Stats stats;
+} // namespace bbbtree

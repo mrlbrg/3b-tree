@@ -1,3 +1,4 @@
+#include "bbbtree/btree.h"
 #include "bbbtree/database.h"
 
 #include <cstdint>
@@ -10,7 +11,7 @@
 using namespace bbbtree;
 
 namespace {
-using TestIndex = std::unordered_map<Tuple::Key, TID>;
+using TestIndex = BTree<Tuple::Key, TID>;
 
 static const constexpr size_t TEST_PAGE_SIZE = 1024;
 static const constexpr size_t TEST_NUM_PAGES = 3;
@@ -18,6 +19,10 @@ static const constexpr size_t TEST_NUM_PAGES = 3;
 class DatabaseTest : public ::testing::Test {
   protected:
 	void Destroy(bool reset) {
+		// Call destructors. Required before calling `make_unique`. Otherwise
+		// destructor is called after constructor, but we need the files written
+		// to disk before constructing anew.
+		db_.reset();
 		db_ = std::make_unique<Database<TestIndex>>(TEST_PAGE_SIZE,
 													TEST_NUM_PAGES, reset);
 	}
@@ -90,26 +95,28 @@ TEST_F(DatabaseTest, OutOfMemory) {
 
 	// Verify correctness
 	for (const auto &[key, expectedTuple] : expected_map) {
-		Tuple actual = db_->get(key);
-		EXPECT_EQ(expectedTuple, actual);
+		EXPECT_EQ(expectedTuple, db_->get(key));
 	}
 }
 // A tuple inserted can be read again, also after destroying the database.
 TEST_F(DatabaseTest, Persistency) {
 	// Calculate the number of tuples that overflow the buffer.
-	const size_t num_tuples =
-		TEST_PAGE_SIZE * TEST_NUM_PAGES / sizeof(Tuple) * 2;
+	const size_t num_tuples = 10;
 
 	auto expected_map = SeedDB(num_tuples);
 	EXPECT_EQ(db_->size(), expected_map.size());
 
+	// Verify correctness
+	for (const auto &[key, expectedTuple] : expected_map) {
+		EXPECT_EQ(expectedTuple, db_->get(key));
+	}
+
 	// Destroy db and create a new one.
 	Destroy(false);
 
-	// Verify correctness
+	// All tuples should still be accessible.
 	for (const auto &[key, expectedTuple] : expected_map) {
-		Tuple actual = db_->get(key);
-		EXPECT_EQ(expectedTuple, actual);
+		EXPECT_EQ(expectedTuple, db_->get(key));
 	}
 }
 

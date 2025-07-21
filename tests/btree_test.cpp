@@ -27,15 +27,12 @@ const uint64_t TUPLES_PER_NODE =
 
 class BTreeTest : public ::testing::Test {
   protected:
-	void Reset(bool reset_files) {
+	void Reset(bool clear_files) {
 		// Destroy B-Tree. Uses the buffer manager to persist state.
 		btree_ = nullptr;
 		// Destroy & create buffer manager.
-		buffer_manager_ =
-			std::make_unique<BufferManager>(TEST_PAGE_SIZE, TEST_NUM_PAGES);
-		// Deletes B-Tree state.
-		if (reset_files)
-			buffer_manager_->reset(BTREE_SEGMENT_ID);
+		buffer_manager_ = std::make_unique<BufferManager>(
+			TEST_PAGE_SIZE, TEST_NUM_PAGES, clear_files);
 		// Destroy & create new B-Tree.
 		btree_ = std::make_unique<BTree<uint64_t, uint64_t>>(BTREE_SEGMENT_ID,
 															 *buffer_manager_);
@@ -47,7 +44,7 @@ class BTreeTest : public ::testing::Test {
 		stats = Stats{};
 	}
 
-	void TearDown() override { std::cout << stats; }
+	void TearDown() override {}
 
 	std::unordered_map<Key, Value> Seed(size_t num_tuples) {
 		std::unordered_map<Key, Value> expected_map;
@@ -61,9 +58,11 @@ class BTreeTest : public ::testing::Test {
 			Value value = dist(rng);
 
 			if (expected_map.count(key) == 0) {
-				btree_->insert(key, value);
+				EXPECT_TRUE(btree_->insert(key, value));
 				expected_map[key] = value;
 				EXPECT_EQ(expected_map.size(), btree_->size());
+			} else {
+				EXPECT_FALSE(btree_->insert(key, value));
 			}
 		}
 
@@ -80,31 +79,31 @@ class BTreeTest : public ::testing::Test {
 // BTree.
 TEST_F(BTreeTest, SingleNodeLookup) {
 	// Init.
-	btree_->insert(1, 2);
+	EXPECT_TRUE(btree_->insert(1, 2));
 	EXPECT_EQ(btree_->lookup(1), 2);
 
 	// Insert in sort order.
-	btree_->insert(3, 4);
+	EXPECT_TRUE(btree_->insert(3, 4));
 	EXPECT_EQ(btree_->lookup(1), 2);
 	EXPECT_EQ(btree_->lookup(3), 4);
 	EXPECT_FALSE(btree_->lookup(2).has_value());
 
 	// Insert out of sort order.
-	btree_->insert(2, 6);
+	EXPECT_TRUE(btree_->insert(2, 6));
 	EXPECT_EQ(btree_->lookup(1), 2);
 	EXPECT_EQ(btree_->lookup(3), 4);
 	EXPECT_EQ(btree_->lookup(2), 6);
 
 	// Duplicate keys throw.
-	EXPECT_THROW(btree_->insert(2, 7), std::logic_error);
+	EXPECT_FALSE(btree_->insert(2, 7));
 }
 
 /// A Tree is bootstrapped correctly at initialization.
 TEST_F(BTreeTest, Persistency) {
 	// Insert on a blank B-Tree.
-	btree_->insert(1, 2);
-	btree_->insert(5, 6);
-	btree_->insert(3, 4);
+	EXPECT_TRUE(btree_->insert(1, 2));
+	EXPECT_TRUE(btree_->insert(5, 6));
+	EXPECT_TRUE(btree_->insert(3, 4));
 	EXPECT_EQ(btree_->lookup(3), 4);
 	EXPECT_EQ(btree_->lookup(5), 6);
 	EXPECT_EQ(btree_->lookup(1), 2);

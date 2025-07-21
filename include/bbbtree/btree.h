@@ -156,7 +156,8 @@ struct BTree final : public Segment {
 		/// Caller then must usually handle the `upper` of the node.
 		Slot *lower_bound(const KeyT &pivot);
 
-		/// Insert a new slot.
+		/// Insert a new slot. Returns false if key alredy exists. Caller must
+		/// ensure that there is enough space. Otherwise its undefined behavior.
 		[[nodiscard]] bool insert(const KeyT &pivot, PageID child);
 
 		/// Get begin of slots section.
@@ -278,8 +279,8 @@ struct BTree final : public Segment {
 	/// Erase an entry in the tree.
 	void erase(const KeyT &key);
 
-	/// Inserts a new entry into the tree.
-	void insert(const KeyT &key, const ValueT &value);
+	/// Inserts a new entry into the tree. Returns false if key already exists.
+	[[nodiscard]] bool insert(const KeyT &key, const ValueT &value);
 
 	/// Print tree. Not thread-safe.
 	void print();

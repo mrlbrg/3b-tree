@@ -7,10 +7,45 @@
 #include <string>
 // -----------------------------------------------------------------
 namespace bbbtree {
+
+// -----------------------------------------------------------------
+BufferManager::BufferManager(size_t page_size, size_t page_count, bool clear)
+	: page_size(page_size), clear(clear) {
+	// Sanity checks
+	assert(page_count > 0);
+	assert(page_size > 0);
+
+	// Allocate memory for Pages
+	page_data.resize(page_count * page_size);
+	// Reserve memory for Buffer Frames
+	page_frames.reserve(page_count);
+	// Reserve memory for free Buffer Frame pointers
+	free_buffer_frames.reserve(page_count);
+	// Reserve memory in HT
+	id_to_frame.reserve(page_count);
+
+	// Create Buffer Frames and
+	// assign a constant Buffer ptr to each Buffer Frame
+	for (auto data = page_data.begin(); data < page_data.end();
+		 data += page_size) {
+		page_frames.emplace_back(&(*data));
+		free_buffer_frames.push_back(&(page_frames.back()));
+	}
+}
+// -----------------------------------------------------------------
+BufferManager::~BufferManager() {
+	for (auto &frame : page_frames) {
+		// Make sure all pages were unfixed again.
+		assert(frame.in_use_by == 0);
+		// TODO: Must also be written when page is new.
+		if (frame.state == State::DIRTY)
+			unload(frame);
+	}
+}
 // ----------------------------------------------------------------
 void BufferManager::reset(BufferFrame &frame) {
-	frame.state = State::UNDEFINED;
 	assert(!frame.in_use_by);
+	frame.state = State::UNDEFINED;
 }
 // ----------------------------------------------------------------
 void BufferManager::unload(BufferFrame &frame) {
@@ -50,42 +85,8 @@ void BufferManager::load(BufferFrame &frame, SegmentID segment_id,
 	file.read_block(page_begin, page_size, frame.data);
 }
 // -----------------------------------------------------------------
-BufferManager::BufferManager(size_t page_size, size_t page_count)
-	: page_size(page_size) {
-	// Sanity checks
-	assert(page_count > 0);
-	assert(page_size > 0);
-
-	// Allocate memory for Pages
-	page_data.resize(page_count * page_size);
-	// Reserve memory for Buffer Frames
-	page_frames.reserve(page_count);
-	// Reserve memory for free Buffer Frame pointers
-	free_buffer_frames.reserve(page_count);
-	// Reserve memory in HT
-	id_to_frame.reserve(page_count);
-
-	// Create Buffer Frames and
-	// assign a constant Buffer ptr to each Buffer Frame
-	for (auto data = page_data.begin(); data < page_data.end();
-		 data += page_size) {
-		page_frames.emplace_back(&(*data));
-		free_buffer_frames.push_back(&(page_frames.back()));
-	}
-}
-// -----------------------------------------------------------------
-BufferManager::~BufferManager() {
-	for (auto &frame : page_frames) {
-		// Make sure all pages were unfixed again.
-		assert(frame.in_use_by == 0);
-		// TODO: Must also be written when page is new.
-		if (frame.state == State::DIRTY)
-			unload(frame);
-	}
-}
-// -----------------------------------------------------------------
 BufferFrame &BufferManager::fix_page(SegmentID segment_id, PageID page_id,
-									 bool exclusive) {
+									 bool /*exclusive*/) {
 	// Sanity Check
 	assert((page_id & 0xFFFF000000000000ULL) == 0);
 
@@ -187,12 +188,11 @@ File &BufferManager::get_segment(SegmentID segment_id) {
 	auto [new_it, success] = segment_to_file.emplace(
 		segment_id, File::open_file(file_name.data(), File::Mode::WRITE));
 
+	// Reset file?
+	if (clear)
+		new_it->second->resize(0);
+
 	return *(new_it->second);
-}
-// ------------------------------------------------------------------
-void BufferManager::reset(SegmentID segment_id) {
-	auto &file = get_segment(segment_id);
-	file.resize(0);
 }
 // ------------------------------------------------------------------
 } // namespace bbbtree

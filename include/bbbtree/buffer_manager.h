@@ -61,7 +61,9 @@ class BufferManager {
 	/// @param[in] page_size  Size in bytes that all pages will have.
 	/// @param[in] page_count Maximum number of pages that should reside in
 	/// memory at most.
-	explicit BufferManager(size_t page_size, size_t page_count);
+	/// @param[in] clear Resets all files before loading.
+	explicit BufferManager(size_t page_size, size_t page_count,
+						   bool clear = false);
 	/// Destructor. Writes all dirty pages to disk.
 	~BufferManager();
 
@@ -83,9 +85,6 @@ class BufferManager {
 
 	/// Returns a page's size.
 	size_t get_page_size() { return page_size; }
-
-	/// Resets contents of a segment. Not thread-safe.
-	void reset(SegmentID segment_id);
 
   private:
 	/// Gets a free buffer frame. Evicts another page when buffer is full.
@@ -120,5 +119,7 @@ class BufferManager {
 	// Maps a Segment to its corresponding file. We use a `map` for pointer
 	// stability.
 	std::map<SegmentID, std::unique_ptr<File>> segment_to_file;
+	// Whether a file is reset before loaded.
+	bool clear;
 };
 } // namespace bbbtree

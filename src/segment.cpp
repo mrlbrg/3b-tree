@@ -141,7 +141,7 @@ uint32_t SPSegment::write(TID tid, const std::byte *record,
 	return record_size;
 }
 
-void SPSegment::erase(TID tid) {
+void SPSegment::erase(TID /*tid*/) {
 	// TODO
 	throw std::logic_error("Database::erase(): Not implemented yet.");
 }

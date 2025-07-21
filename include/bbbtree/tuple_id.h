@@ -2,6 +2,8 @@
 
 #include "bbbtree/types.h"
 
+#include <iostream>
+
 namespace bbbtree {
 /// @brief A TID consists of page ID (48 bit) | slot ID (16 bit).
 struct TID {
@@ -15,6 +17,10 @@ struct TID {
 	[[nodiscard]] PageID get_page_id() const { return value >> 16; }
 	/// Get the slot ID.
 	[[nodiscard]] SlotID get_slot_id() const { return value & 0xFFFF; }
+
+	auto operator<=>(const TID &) const = default;
+
+	friend std::ostream &operator<<(std::ostream &os, const TID &tid);
 
   private:
 	/// The TID value.

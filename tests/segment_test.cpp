@@ -10,27 +10,28 @@ static const constexpr size_t SP_SEGMENT_ID = 321;
 
 class SegmentTest : public ::testing::Test {
   protected:
-	void RestructFSI() {
+	void Destroy(bool clear) {
+		sp_segment.reset();
+		fsi.reset();
+		buffer_manager.reset();
+
+		buffer_manager =
+			std::make_unique<bbbtree::BufferManager>(1024, 10, clear);
 		fsi = std::make_unique<bbbtree::FSISegment>(FSI_SEGMENT_ID,
 													*buffer_manager);
+		sp_segment = std::make_unique<bbbtree::SPSegment>(
+			SP_SEGMENT_ID, *buffer_manager, *fsi);
 	}
 
 	// Runs *before* each TEST_F
-	void SetUp() override {
-		buffer_manager->reset(FSI_SEGMENT_ID);
-		buffer_manager->reset(SP_SEGMENT_ID);
-	}
+	void SetUp() override { Destroy(true); }
 
 	// Runs *after* each TEST_F
 	void TearDown() override {}
 
-	std::unique_ptr<bbbtree::BufferManager> buffer_manager =
-		std::make_unique<bbbtree::BufferManager>(1024, 10);
-	std::unique_ptr<bbbtree::FSISegment> fsi =
-		std::make_unique<bbbtree::FSISegment>(FSI_SEGMENT_ID, *buffer_manager);
-	std::unique_ptr<bbbtree::SPSegment> sp_segment =
-		std::make_unique<bbbtree::SPSegment>(SP_SEGMENT_ID, *buffer_manager,
-											 *fsi);
+	std::unique_ptr<bbbtree::BufferManager> buffer_manager;
+	std::unique_ptr<bbbtree::FSISegment> fsi;
+	std::unique_ptr<bbbtree::SPSegment> sp_segment;
 };
 
 TEST_F(SegmentTest, Empty) {
@@ -66,7 +67,7 @@ TEST_F(SegmentTest, Persistency) {
 	// TODO: Destroy FSI segment and create one again. The data should be
 	// persisted.
 	fsi->create_new_page(buffer_manager->get_page_size());
-	RestructFSI();
+	Destroy(false);
 
 	EXPECT_TRUE(fsi->find(buffer_manager->get_page_size() / 2));
 }
