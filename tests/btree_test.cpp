@@ -19,11 +19,8 @@ static const constexpr size_t BTREE_SEGMENT_ID = 834;
 static const constexpr size_t TEST_PAGE_SIZE = 256;
 static const constexpr size_t TEST_NUM_PAGES = 10;
 const uint64_t TUPLES_PER_LEAF =
-	(TEST_PAGE_SIZE - sizeof(BTree<Key, Value>::LeafNode)) /
-	(sizeof(BTree<Key, Value>::LeafNode::Slot) + sizeof(Key) + sizeof(Value));
-const uint64_t TUPLES_PER_NODE =
-	(TEST_PAGE_SIZE - sizeof(BTree<Key, Value>::InnerNode)) /
-	(sizeof(BTree<Key, Value>::InnerNode::Slot) + sizeof(Key) + sizeof(Value));
+	(TEST_PAGE_SIZE - 8) / (8 + sizeof(Key) + sizeof(Value));
+const uint64_t TUPLES_PER_NODE = (TEST_PAGE_SIZE - 16) / (16 + sizeof(Key));
 
 class BTreeTest : public ::testing::Test {
   protected:

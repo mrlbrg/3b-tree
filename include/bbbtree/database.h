@@ -4,6 +4,7 @@
 #include "bbbtree/segment.h"
 #include "bbbtree/types.h"
 
+#include <concepts>
 #include <cstdint>
 #include <vector>
 
@@ -21,18 +22,18 @@ static const constexpr SegmentID SP_SEGMENT_ID = 1;
 static const constexpr SegmentID INDEX_SEGMENT_ID = 2;
 
 /// A concept that requires some member functions for an index.
-// template <typename IndexT>
-// concept Indexable = requires(IndexT index, Tuple::Key key, Tuple::Value
-// value) {
-//     { index.lookup(key) } -> std::same_as<std::optional<Tuple::Value>>;
-//     { index.erase(key) } -> std::same_as<void>;
-//     { index.insert(key, value) } -> std::same_as<void>;
-// };
+template <template <typename, typename> class IndexT, typename KeyT>
+concept IndexC = requires(IndexT<KeyT, ValueT> index, KeyT key, ValueT value) {
+	{ index.lookup(key) } -> std::same_as<std::optional<ValueT>>;
+	{ index.erase(key) } -> std::same_as<void>;
+	{ index.insert(key, value) } -> std::same_as<bool>;
+};
 
 /// A Database maintains a single table of keys and values. The schema is
-/// fixated at compile-time. It is templated on its access path to tuples
-/// identified through their keys.
+/// fixated at compile-time. It is templated on its index, which maps `KeyT` to
+/// TIDs. The value type is always the same.
 template <template <typename, typename> typename IndexT, typename KeyT>
+	requires IndexC<IndexT, KeyT>
 class Database {
   public:
 	/// A Tuple with key and value that are stored in the database.
@@ -42,9 +43,7 @@ class Database {
 		ValueT value;
 
 		/// Equality operator.
-		bool operator==(const Tuple &other) const {
-			return key == other.key && value == other.value;
-		}
+		auto operator<=>(const Tuple &) const = default;
 	};
 
 	/// Constructor.

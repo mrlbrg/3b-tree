@@ -37,8 +37,42 @@ concept LessEqualComparable = requires(T a, T b) {
 /// later.
 template <LessEqualComparable KeyT, typename ValueT>
 struct BTree final : public Segment {
-	/// Header of a generic tree node. Always consists of a header, a slot
-	/// section and the data section.
+
+	/// Constructor. Not thread-safe.
+	BTree(SegmentID segment_id, BufferManager &buffer_manager);
+
+	/// Destructor.
+	~BTree();
+
+	/// Lookup an entry in the tree. Returns `nullopt` if key was not found.
+	std::optional<ValueT> lookup(const KeyT &key);
+
+	/// Erase an entry in the tree.
+	void erase(const KeyT &key);
+
+	/// Inserts a new entry into the tree. Returns false if key already exists.
+	[[nodiscard]] bool insert(const KeyT &key, const ValueT &value);
+
+	/// Print tree. Not thread-safe.
+	void print();
+
+	/// Returns the number of key/value pairs stored in the tree.
+	/// Do not use for production, only for testing. Traverses whole tree.
+	/// Not thread-safe.
+	size_t size();
+
+	/// Returns the number of levels in the tree.
+	/// Not thread-safe.
+	size_t height();
+
+  private:
+	/// TODO: Find a more elegant solution for persistency:
+	/// State is persisted at page 0 of this segment.
+	/// Read and written out at construction/destruction time.
+
+	/// A generic tree node. Always consists of a header, a slot
+	/// section and the data section. Only construct these on buffered pages
+	/// provided by the `buffer_manager`.
 	struct Node {
 		/// Upper end of data. Where new data can be prepended.
 		uint32_t data_start;
@@ -266,38 +300,6 @@ struct BTree final : public Segment {
 		/// Get end of slots section.
 		Slot *slots_end() { return slots_begin() + this->slot_count; }
 	};
-
-	/// Constructor. Not thread-safe.
-	BTree(SegmentID segment_id, BufferManager &buffer_manager);
-
-	/// Destructor.
-	~BTree();
-
-	/// Lookup an entry in the tree. Returns `nullopt` if key was not found.
-	std::optional<ValueT> lookup(const KeyT &key);
-
-	/// Erase an entry in the tree.
-	void erase(const KeyT &key);
-
-	/// Inserts a new entry into the tree. Returns false if key already exists.
-	[[nodiscard]] bool insert(const KeyT &key, const ValueT &value);
-
-	/// Print tree. Not thread-safe.
-	void print();
-
-	/// Returns the number of key/value pairs stored in the tree.
-	/// Do not use for production, only for testing. Traverses whole tree.
-	/// Not thread-safe.
-	size_t size();
-
-	/// Returns the number of levels in the tree.
-	/// Not thread-safe.
-	size_t height();
-
-  private:
-	/// TODO: Find a more elegant solution for persistency:
-	/// State is persisted at page 0 of this segment.
-	/// Read and written out at construction/destruction time.
 
 	/// The page of the current root.
 	/// Important TODO: When multithreading, whenever someone tries to acquire a

@@ -7,6 +7,7 @@
 namespace bbbtree {
 // -----------------------------------------------------------------
 template <template <typename, typename> typename IndexT, typename KeyT>
+	requires IndexC<IndexT, KeyT>
 Database<IndexT, KeyT>::Database(size_t page_size, size_t num_pages, bool reset)
 	: buffer_manager(page_size, num_pages, reset),
 	  space_inventory(FSI_SEGMENT_ID, buffer_manager),
@@ -16,6 +17,7 @@ Database<IndexT, KeyT>::Database(size_t page_size, size_t num_pages, bool reset)
 }
 // -----------------------------------------------------------------
 template <template <typename, typename> typename IndexT, typename KeyT>
+	requires IndexC<IndexT, KeyT>
 void Database<IndexT, KeyT>::insert(const Tuple &tuple) {
 	// Get a new TID
 	auto tid = records.allocate(sizeof(tuple));
@@ -32,6 +34,7 @@ void Database<IndexT, KeyT>::insert(const Tuple &tuple) {
 }
 // -----------------------------------------------------------------
 template <template <typename, typename> typename IndexT, typename KeyT>
+	requires IndexC<IndexT, KeyT>
 void Database<IndexT, KeyT>::insert(const std::vector<Tuple> &tuples) {
 	// TODO: Detect sequential inserts?
 	for (auto &tuple : tuples)
@@ -39,6 +42,7 @@ void Database<IndexT, KeyT>::insert(const std::vector<Tuple> &tuples) {
 }
 // -----------------------------------------------------------------
 template <template <typename, typename> typename IndexT, typename KeyT>
+	requires IndexC<IndexT, KeyT>
 Database<IndexT, KeyT>::Tuple Database<IndexT, KeyT>::get(const KeyT &key) {
 	// Get TID for key
 	auto maybe_tid = index.lookup(key);
@@ -58,6 +62,7 @@ Database<IndexT, KeyT>::Tuple Database<IndexT, KeyT>::get(const KeyT &key) {
 }
 // -----------------------------------------------------------------
 template <template <typename, typename> typename IndexT, typename KeyT>
+	requires IndexC<IndexT, KeyT>
 void Database<IndexT, KeyT>::erase(const KeyT & /*key*/) {
 	// TODO
 	throw std::logic_error("Database<IndexT>::erase(): Not implemented yet.");
