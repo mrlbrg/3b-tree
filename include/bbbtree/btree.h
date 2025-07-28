@@ -76,8 +76,8 @@ struct BTree final : public Segment {
 	struct Node {
 		/// Upper end of data. Where new data can be prepended.
 		uint32_t data_start;
-		/// The level in the tree.
-		uint16_t level;
+		/// The level in the tree. Leafs are level 0.
+		const uint16_t level;
 		/// The number of entries.
 		uint16_t slot_count;
 

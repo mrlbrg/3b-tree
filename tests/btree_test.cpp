@@ -1,6 +1,5 @@
 #include "bbbtree/btree.h"
 #include "bbbtree/buffer_manager.h"
-#include "bbbtree/stats.h"
 
 #include <cstddef>
 #include <gtest/gtest.h>
@@ -36,10 +35,7 @@ class BTreeTest : public ::testing::Test {
 	}
 
 	// Create a blank B-Tree.
-	void SetUp() override {
-		Reset(true);
-		stats = Stats{};
-	}
+	void SetUp() override { Reset(true); }
 
 	void TearDown() override {}
 

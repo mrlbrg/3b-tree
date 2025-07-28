@@ -19,7 +19,7 @@ set(TEST_CC
 # ---------------------------------------------------------------------------
 
 add_executable(tester tests/tester.cpp ${TEST_CC})
-target_link_libraries(tester bbbtree gtest)
+target_link_libraries(tester PRIVATE bbbtree gtest)
 
 enable_testing()
 add_test(bbbtree tester)

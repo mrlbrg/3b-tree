@@ -1,5 +1,6 @@
 // -----------------------------------------------------------------
 #include "bbbtree/buffer_manager.h"
+#include "bbbtree/stats.h"
 // -----------------------------------------------------------------
 #include <cassert>
 #include <cstdlib>
@@ -62,6 +63,7 @@ void BufferManager::unload(BufferFrame &frame) {
 		file.resize(page_end);
 	// TODO: Make sure everything was written out by getting bytes.
 	file.write_block(frame.data, page_begin, page_size);
+	stats.bytes_written_physically += page_size;
 }
 // -----------------------------------------------------------------
 void BufferManager::load(BufferFrame &frame, SegmentID segment_id,

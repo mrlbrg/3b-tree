@@ -1,5 +1,6 @@
 #include "bbbtree/database.h"
 #include "bbbtree/btree.h"
+#include "bbbtree/stats.h"
 
 #include <cstddef>
 #include <stdexcept>
@@ -12,9 +13,7 @@ Database<IndexT, KeyT>::Database(size_t page_size, size_t num_pages, bool reset)
 	: buffer_manager(page_size, num_pages, reset),
 	  space_inventory(FSI_SEGMENT_ID, buffer_manager),
 	  records(SP_SEGMENT_ID, buffer_manager, space_inventory),
-	  index(INDEX_SEGMENT_ID, buffer_manager) {
-	index.print();
-}
+	  index(INDEX_SEGMENT_ID, buffer_manager) {}
 // -----------------------------------------------------------------
 template <template <typename, typename> typename IndexT, typename KeyT>
 	requires IndexC<IndexT, KeyT>
@@ -31,6 +30,7 @@ void Database<IndexT, KeyT>::insert(const Tuple &tuple) {
 	// Insert tuple in records
 	records.write(tid, reinterpret_cast<const std::byte *>(&tuple),
 				  sizeof(tuple));
+	stats.bytes_written_logically += sizeof(tuple);
 }
 // -----------------------------------------------------------------
 template <template <typename, typename> typename IndexT, typename KeyT>
@@ -64,7 +64,7 @@ Database<IndexT, KeyT>::Tuple Database<IndexT, KeyT>::get(const KeyT &key) {
 template <template <typename, typename> typename IndexT, typename KeyT>
 	requires IndexC<IndexT, KeyT>
 void Database<IndexT, KeyT>::erase(const KeyT & /*key*/) {
-	// TODO
+	// TODO. Also update stats here.
 	throw std::logic_error("Database<IndexT>::erase(): Not implemented yet.");
 }
 // -----------------------------------------------------------------
