@@ -10,7 +10,7 @@ using PageID = uint64_t;
 /// A Slot within a Page.
 using SlotID = uint16_t;
 
-/// The Segment and Page ID within one int.
+/// The Segment and Page ID within one int. TODO: Delete.
 struct SegmentPageID {
 	/// Constructor.
 	SegmentPageID(SegmentID segment_id, PageID page_id)

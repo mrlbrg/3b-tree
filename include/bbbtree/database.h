@@ -42,7 +42,7 @@ class Database {
 		KeyT key;
 		ValueT value;
 
-		/// Equality operator.
+		/// Spaceship operator.
 		auto operator<=>(const Tuple &) const = default;
 	};
 

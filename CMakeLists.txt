@@ -15,6 +15,7 @@ add_compile_options(-Wall -Wextra)
 # ---------------------------------------------------------------------------
 
 include("${CMAKE_SOURCE_DIR}/vendor/googletest.cmake")
+include("${CMAKE_SOURCE_DIR}/vendor/googlebench.cmake")
 
 # ---------------------------------------------------------------------------
 # Includes
@@ -40,6 +41,12 @@ include("${CMAKE_SOURCE_DIR}/src/local.cmake")
 # ---------------------------------------------------------------------------
 
 include("${CMAKE_SOURCE_DIR}/tests/local.cmake")
+
+# ---------------------------------------------------------------------------
+# Benchmarks
+# ---------------------------------------------------------------------------
+
+include("${CMAKE_SOURCE_DIR}/bench/local.cmake")
 
 # Add the executable
 add_executable(3btree main.cpp)

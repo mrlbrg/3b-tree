@@ -4,13 +4,12 @@
 
 include(FetchContent)
 
-# Set FetchContent to use a shallow clone
-set(FETCHCONTENT_TRY_FIND_PACKAGE FALSE)
-
 FetchContent_Declare(
-  googletest
-  GIT_REPOSITORY https://github.com/google/googletest.git
-  GIT_TAG release-1.8.0
+  benchmark
+  GIT_REPOSITORY https://github.com/google/benchmark.git
+  GIT_TAG 336bb8db986cc52cdf0cefa0a7378b9567d1afee
 )
 
-FetchContent_MakeAvailable(googletest)
+set(BENCHMARK_ENABLE_TESTING OFF)
+
+FetchContent_MakeAvailable(benchmark)

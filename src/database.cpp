@@ -1,5 +1,6 @@
 #include "bbbtree/database.h"
 #include "bbbtree/btree.h"
+#include "bbbtree/map.h"
 #include "bbbtree/stats.h"
 
 #include <cstddef>
@@ -71,4 +72,5 @@ void Database<IndexT, KeyT>::erase(const KeyT & /*key*/) {
 // Explicit instantiations
 // template class Database<std::unordered_map, uint64_t>;
 template class Database<BTree, uint64_t>;
+template class Database<Map, uint64_t>;
 } // namespace bbbtree

@@ -13,6 +13,7 @@ set(
     src/segment.cpp
     src/slotted_page.cpp
     src/btree.cpp
+    src/map.cpp
     src/stats.cpp
     src/tuple_id.cpp
 )

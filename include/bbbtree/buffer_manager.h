@@ -52,9 +52,7 @@ class buffer_full_error : public std::exception {
 /// Manages all pages in memory.
 /// Transparently swaps pages between storage and memory when buffer becomes
 /// full.
-/// TODO: For now, does not actually perform I/O.
 /// TODO: For now, it runs in a single thread.
-/// TODO: For now, it cannot evict pages.
 class BufferManager {
   public:
 	/// Constructor.

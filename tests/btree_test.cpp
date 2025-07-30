@@ -30,8 +30,8 @@ class BTreeTest : public ::testing::Test {
 		buffer_manager_ = std::make_unique<BufferManager>(
 			TEST_PAGE_SIZE, TEST_NUM_PAGES, clear_files);
 		// Destroy & create new B-Tree.
-		btree_ = std::make_unique<BTree<uint64_t, uint64_t>>(BTREE_SEGMENT_ID,
-															 *buffer_manager_);
+		btree_ = std::make_unique<BTree<Key, Value>>(BTREE_SEGMENT_ID,
+													 *buffer_manager_);
 	}
 
 	// Create a blank B-Tree.
@@ -72,6 +72,7 @@ class BTreeTest : public ::testing::Test {
 // BTree.
 TEST_F(BTreeTest, SingleNodeLookup) {
 	// Init.
+	EXPECT_FALSE(btree_->lookup(1).has_value());
 	EXPECT_TRUE(btree_->insert(1, 2));
 	EXPECT_EQ(btree_->lookup(1), 2);
 

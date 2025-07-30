@@ -9,9 +9,10 @@
 #include <optional>
 #include <vector>
 
-// TODO: We currently do not persist state through the buffer manager while
-// running the B-Tree. We only persist the state on destruction. Might want to
-// maintain state through the buffer manager during runtime though.
+// TODO: We currently do not persist the tree object while
+// running the B-Tree (e.g. root page id). We only persist the state on
+// destruction. Might want to maintain state through the buffer manager during
+// runtime though.
 
 namespace bbbtree {
 /// Requirements for the keys of the tree. TODO.
