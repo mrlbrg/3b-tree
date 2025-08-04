@@ -79,6 +79,8 @@ struct SlottedPage {
 
 	/// Get free space.
 	size_t get_free_space() {
+		assert(header.data_start >=
+			   sizeof(SlottedPage) + header.slot_count * sizeof(Slot));
 		return header.data_start - sizeof(SlottedPage) -
 			   header.slot_count * sizeof(Slot);
 	};
@@ -89,9 +91,8 @@ struct SlottedPage {
 
 	// Allocate a slot. Throws if not enough space left on page.
 	/// @param[in] data_size    The slot that should be allocated.
-	/// @param[in] page_size    The new size of a slot.
 	/// @return                 The new slot's ID.
-	SlotID allocate(uint32_t data_size, uint32_t page_size);
+	SlotID allocate(uint32_t data_size);
 
 	/// Erase a slot. Throws if `slot_id` invalid.
 	/// @param[in] slot_id      The slot that should be erased

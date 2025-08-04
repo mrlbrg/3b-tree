@@ -1,5 +1,6 @@
 #include "bbbtree/btree.h"
 #include "bbbtree/database.h"
+#include "bbbtree/types.h"
 
 #include <cstdint>
 #include <gtest/gtest.h>
@@ -11,7 +12,7 @@
 using namespace bbbtree;
 
 namespace {
-using KeyT = uint64_t;
+using KeyT = UInt64;
 using TestDatabase = Database<BTree, KeyT>;
 
 static const constexpr size_t TEST_PAGE_SIZE = 1024;
@@ -39,7 +40,7 @@ class DatabaseTest : public ::testing::Test {
 		std::unordered_map<KeyT, TestDatabase::Tuple> expected_map;
 
 		std::mt19937_64 rng(42); // Fixed seed for reproducibility
-		std::uniform_int_distribution<KeyT> dist;
+		std::uniform_int_distribution<uint64_t> dist;
 
 		// Generate random tuples with unique keys
 		while (expected_map.size() < num_tuples) {

@@ -5,7 +5,9 @@
 #include "bbbtree/types.h"
 
 #include <cassert>
+#include <concepts>
 #include <cstdint>
+#include <cstring>
 #include <optional>
 #include <vector>
 
@@ -15,12 +17,14 @@
 // runtime though.
 
 namespace bbbtree {
-/// Requirements for the keys of the tree. TODO.
+/// Requirements for the keys of the index.
 template <typename T>
-concept LessEqualComparable = requires(T a, T b) {
+concept Indexable = requires(T a, T b, const std::byte *data, uint16_t size) {
 	{ a <= b } -> std::convertible_to<bool>;
 	{ a == b } -> std::convertible_to<bool>;
-	sizeof(T);
+	{ a.size() } -> std::same_as<uint16_t>;
+	{ a.serialize() } -> std::same_as<const std::byte *>;
+	{ T::deserialize(data, size) } -> std::same_as<T>;
 };
 
 /// External Storage index that maps from unique, possibly variable-length keys
@@ -36,8 +40,7 @@ concept LessEqualComparable = requires(T a, T b) {
 /// re-use/compactify the space nor merge nodes. We leave nodes fragmented.
 /// TODO: We cannot use one file per index if we want to have several trees
 /// later.
-template <LessEqualComparable KeyT, typename ValueT>
-struct BTree final : public Segment {
+template <Indexable KeyT, typename ValueT> struct BTree final : public Segment {
 
 	/// Constructor. Not thread-safe.
 	BTree(SegmentID segment_id, BufferManager &buffer_manager);
@@ -93,6 +96,23 @@ struct BTree final : public Segment {
 		bool operator==(const Node &other) const { return this == &other; }
 
 	  protected:
+		struct Slot {
+			/// Default Constructor.
+			Slot() = delete;
+			/// Constructor.
+			Slot(uint32_t offset, uint16_t key_size)
+				: offset(offset), key_size(key_size) {}
+
+			/// Returns the key stored in this slot. `KeyT` is only a shallow
+			/// copy from the node. Manage lifetime carefully.
+			const KeyT get_key(const std::byte *begin) const;
+
+		  protected:
+			/// The offset within the page.
+			uint32_t offset;
+			/// The number of bytes from offset to end of key.
+			uint16_t key_size;
+		};
 		/// Get data.
 		std::byte *get_data() { return reinterpret_cast<std::byte *>(this); }
 		/// Get constant data.
@@ -110,38 +130,6 @@ struct BTree final : public Segment {
 	/// keys pivoting to other nodes. Entries are <KeyT, PageID>. They are
 	/// created upon node splits.
 	struct InnerNode final : public Node {
-		/// Indicates the position and length of the key within the page.
-		/// Contains the key's corresponding child (PageID).
-		struct Slot {
-			/// Default Constructor.
-			Slot() = delete;
-			/// Constructor.
-			Slot(PageID child, uint32_t offset, uint16_t key_size)
-				: child(child), offset(offset), key_size(key_size) {}
-			/// The child of the pivot.
-			PageID child;
-			/// The offset within the page.
-			uint32_t offset;
-			/// The number of bytes from offset to end of key.
-			uint16_t key_size;
-			/// The number of bytes from end of key to end of entry.
-			/// TODO: Add padding to ensure memory alignment for keys as well.
-			uint16_t padding{0};
-
-			/// Returns a const reference to the key this slot is pointing to.
-			const KeyT &get_key(const std::byte *begin) const {
-				assert(key_size);
-				return *reinterpret_cast<const KeyT *>(begin + offset);
-			}
-
-			/// Returns a const reference to the key this slot is pointing to.
-			KeyT &get_key(std::byte *begin) {
-				assert(key_size);
-				return *reinterpret_cast<KeyT *>(begin + offset);
-			}
-		};
-
-	  public:
 		/// Default Constructor.
 		InnerNode() = delete;
 		/// Constructor. Used when needing a new node for a node split.
@@ -149,8 +137,8 @@ struct BTree final : public Segment {
 
 		/// Returns true if this leaf has enough space for the given key/value
 		/// pair.
-		bool has_space(const KeyT &pivot) {
-			return get_free_space() >= (sizeof(pivot) + sizeof(Slot));
+		bool has_space(const KeyT &pivot) const {
+			return get_free_space() >= (pivot.size() + sizeof(Pivot));
 		}
 
 		/// Returns the appropriate child pointer for a given pivot.
@@ -164,7 +152,7 @@ struct BTree final : public Segment {
 		/// Returns reference to uppermost key on left node, therefore this node
 		/// must not be released while the returned key is used. Otherwise we
 		/// have a dangling reference.
-		const KeyT &split(InnerNode &new_node, size_t page_size);
+		const KeyT split(InnerNode &new_node, size_t page_size);
 
 		/// Inserts a new pivot/child pair resulting from a split.
 		/// Pivot must be unique. Must have enough space.
@@ -182,6 +170,19 @@ struct BTree final : public Segment {
 		void print();
 
 	  private:
+		/// Indicates the position and length of the key within the page.
+		/// Contains the key's corresponding child (PageID).
+		struct Pivot final : public Node::Slot {
+			/// Constructor.
+			Pivot(std::byte *page_begin, uint32_t offset, const KeyT &key,
+				  PageID child);
+
+			/// The child of this pivot.
+			PageID child;
+
+			/// Print the slot to std output.
+			void print(const std::byte *begin) const;
+		};
 		/// Right-most child. Pivot for all keys bigger than the biggest pivot.
 		/// Must be set during node splitting. Zero is invalid.
 		PageID upper;
@@ -189,69 +190,51 @@ struct BTree final : public Segment {
 		/// Returns the first slot whose key is not smaller than the given
 		/// pivot. Returns pointer to `slots_end` if no such slot is found.
 		/// Caller then must usually handle the `upper` of the node.
-		Slot *lower_bound(const KeyT &pivot);
+		Pivot *lower_bound(const KeyT &pivot);
 
 		/// Insert a new slot. Returns false if key alredy exists. Caller must
 		/// ensure that there is enough space. Otherwise its undefined behavior.
 		[[nodiscard]] bool insert(const KeyT &pivot, PageID child);
 
 		/// Get begin of slots section.
-		Slot *slots_begin() {
-			return reinterpret_cast<Slot *>(this->get_data() +
-											sizeof(InnerNode));
+		Pivot *slots_begin() {
+			return reinterpret_cast<Pivot *>(this->get_data() +
+											 sizeof(InnerNode));
 		}
 		/// Get end of slots section.
-		Slot *slots_end() { return slots_begin() + this->slot_count; }
+		Pivot *slots_end() { return slots_begin() + this->slot_count; }
 
 		/// Get free space in bytes. Equals the space between the header + slots
 		/// and data section.
-		size_t get_free_space() {
+		size_t get_free_space() const {
 			return this->data_start - sizeof(InnerNode) -
-				   this->slot_count * sizeof(Slot);
+				   this->slot_count * sizeof(Pivot);
 		};
+
+	  public:
+		static const constexpr size_t min_space =
+			sizeof(InnerNode) + sizeof(Pivot);
 	};
 
 	/// Specialization of a node that is a leaf.
-	/// Entries are <KeyT, ValueT> where ValueT usually is a TID in an index.
+	/// Entries are <KeyT, ValueT> where ValueT is typically a TID in an index.
 	struct LeafNode final : public Node {
 		/// Indicates the position and length of the key/value pair within the
 		/// node.
-		struct Slot {
-			/// Default Constructor.
-			Slot() = delete;
+		struct LeafSlot final : public Node::Slot {
+			/// Constructor.
+			LeafSlot(std::byte *page_begin, uint32_t offset, const KeyT &key,
+					 const ValueT &value);
 
-			Slot(uint32_t offset, uint16_t key_size, uint16_t value_size)
-				: offset(offset), key_size(key_size), value_size(value_size) {};
+			/// Returns a const reference to the value this slot is pointing
+			/// to.
+			const ValueT &get_value(const std::byte *begin) const;
 
-			/// The offset within the page.
-			uint32_t offset;
-			/// The number of bytes from offset to end of key.
-			uint16_t key_size;
+			void print(const std::byte *begin) const;
+
+		  private:
 			/// The number of bytes from end of key to end of entry.
 			uint16_t value_size;
-
-			/// Returns a const reference to the key this slot is pointing to.`
-			const KeyT &get_key(const std::byte *begin) const {
-				assert(key_size);
-				return *reinterpret_cast<const KeyT *>(begin + offset);
-			}
-			/// Returns a const reference to the value this slot is pointing
-			/// to.`
-			const ValueT &get_value(const std::byte *begin) const {
-				assert(value_size);
-				return *reinterpret_cast<const ValueT *>(begin + offset +
-														 key_size);
-			}
-			/// Returns a reference to the key this slot is pointing to.`
-			KeyT &get_key(std::byte *begin) {
-				assert(key_size);
-				return *reinterpret_cast<KeyT *>(begin + offset);
-			}
-			/// Returns a reference to the value this slot is pointing to.`
-			ValueT &get_value(std::byte *begin) {
-				assert(value_size);
-				return *reinterpret_cast<ValueT *>(begin + offset + key_size);
-			}
 		};
 		/// Default Constructor.
 		LeafNode() = delete;
@@ -260,9 +243,9 @@ struct BTree final : public Segment {
 
 		/// Returns true if this leaf has enough space for the given key/value
 		/// pair.
-		bool has_space(const KeyT &key, const ValueT &value) {
+		bool has_space(const KeyT &key, const ValueT &value) const {
 			return get_free_space() >=
-				   (sizeof(key) + sizeof(value) + sizeof(Slot));
+				   (key.size() + sizeof(value) + sizeof(LeafSlot));
 		}
 
 		/// Get the index of the first key that is not less than than a provided
@@ -274,8 +257,9 @@ struct BTree final : public Segment {
 		/// ensure that there is enough space.
 		[[nodiscard]] bool insert(const KeyT &key, const ValueT &value);
 
-		/// Splits the leaf and returns the new pivot key for the parent.
-		[[nodiscard]] const KeyT &split(LeafNode &new_node, size_t page_size);
+		/// Splits the leaf and returns the resulting pivotal key to be inserted
+		/// into the parent.
+		[[nodiscard]] const KeyT split(LeafNode &new_node, size_t page_size);
 
 		/// Print leaf to standard output.
 		void print();
@@ -283,23 +267,28 @@ struct BTree final : public Segment {
 	  private:
 		/// Get free space in bytes. Equals the space between the header + slots
 		/// and data section.
-		size_t get_free_space() {
+		size_t get_free_space() const {
 			assert(this->data_start >=
-				   (sizeof(LeafNode) + this->slot_count * sizeof(Slot)));
+				   (sizeof(LeafNode) + this->slot_count * sizeof(LeafSlot)));
 			return this->data_start - sizeof(LeafNode) -
-				   this->slot_count * sizeof(Slot);
+				   this->slot_count * sizeof(LeafSlot);
 		};
 		/// Get the slot whose key is not smaller than the given key.
 		/// If no such key is found, returns pointer to end of slot section.
-		Slot *lower_bound(const KeyT &key);
+		LeafSlot *lower_bound(const KeyT &key);
 
 		/// Get beginning of slots section.
-		Slot *slots_begin() {
-			return reinterpret_cast<Slot *>(this->get_data() +
-											sizeof(LeafNode));
+		LeafSlot *slots_begin() {
+			return reinterpret_cast<LeafSlot *>(this->get_data() +
+												sizeof(LeafNode));
 		}
 		/// Get end of slots section.
-		Slot *slots_end() { return slots_begin() + this->slot_count; }
+		LeafSlot *slots_end() { return slots_begin() + this->slot_count; }
+
+	  public:
+		/// The minimum of space required on a page to store something.
+		static const constexpr size_t min_space =
+			sizeof(LeafNode) + sizeof(LeafSlot);
 	};
 
 	/// The page of the current root.

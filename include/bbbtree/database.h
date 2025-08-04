@@ -9,6 +9,7 @@
 #include <vector>
 
 // TODO: Rethink `logic_errors` and which error makes more sense to throw.
+// TODO: Maybe store tuples directly in B-Tree and do not redirect via TID.
 
 namespace bbbtree {
 // We use only a single type of value for this database.
@@ -21,19 +22,21 @@ static const constexpr SegmentID FSI_SEGMENT_ID = 0;
 static const constexpr SegmentID SP_SEGMENT_ID = 1;
 static const constexpr SegmentID INDEX_SEGMENT_ID = 2;
 
-/// A concept that requires some member functions for an index.
+/// A concept that requires some member functions from an index mapping a key to
+/// TIDs.
 template <template <typename, typename> class IndexT, typename KeyT>
-concept IndexC = requires(IndexT<KeyT, ValueT> index, KeyT key, ValueT value) {
-	{ index.lookup(key) } -> std::same_as<std::optional<ValueT>>;
-	{ index.erase(key) } -> std::same_as<void>;
-	{ index.insert(key, value) } -> std::same_as<bool>;
-};
+concept IndexInterface =
+	requires(IndexT<KeyT, TID> index, const KeyT &key, const TID &value) {
+		{ index.lookup(key) } -> std::same_as<std::optional<TID>>;
+		{ index.erase(key) } -> std::same_as<void>;
+		{ index.insert(key, value) } -> std::same_as<bool>;
+	};
 
 /// A Database maintains a single table of keys and values. The schema is
 /// fixated at compile-time. It is templated on its index, which maps `KeyT` to
 /// TIDs. The value type is always the same.
 template <template <typename, typename> typename IndexT, typename KeyT>
-	requires IndexC<IndexT, KeyT>
+	requires IndexInterface<IndexT, KeyT>
 class Database {
   public:
 	/// A Tuple with key and value that are stored in the database.

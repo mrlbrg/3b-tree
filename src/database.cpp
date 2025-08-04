@@ -2,6 +2,7 @@
 #include "bbbtree/btree.h"
 #include "bbbtree/map.h"
 #include "bbbtree/stats.h"
+#include "bbbtree/types.h"
 
 #include <cstddef>
 #include <stdexcept>
@@ -9,7 +10,7 @@
 namespace bbbtree {
 // -----------------------------------------------------------------
 template <template <typename, typename> typename IndexT, typename KeyT>
-	requires IndexC<IndexT, KeyT>
+	requires IndexInterface<IndexT, KeyT>
 Database<IndexT, KeyT>::Database(size_t page_size, size_t num_pages, bool reset)
 	: buffer_manager(page_size, num_pages, reset),
 	  space_inventory(FSI_SEGMENT_ID, buffer_manager),
@@ -17,7 +18,7 @@ Database<IndexT, KeyT>::Database(size_t page_size, size_t num_pages, bool reset)
 	  index(INDEX_SEGMENT_ID, buffer_manager) {}
 // -----------------------------------------------------------------
 template <template <typename, typename> typename IndexT, typename KeyT>
-	requires IndexC<IndexT, KeyT>
+	requires IndexInterface<IndexT, KeyT>
 void Database<IndexT, KeyT>::insert(const Tuple &tuple) {
 	// Get a new TID
 	auto tid = records.allocate(sizeof(tuple));
@@ -35,7 +36,7 @@ void Database<IndexT, KeyT>::insert(const Tuple &tuple) {
 }
 // -----------------------------------------------------------------
 template <template <typename, typename> typename IndexT, typename KeyT>
-	requires IndexC<IndexT, KeyT>
+	requires IndexInterface<IndexT, KeyT>
 void Database<IndexT, KeyT>::insert(const std::vector<Tuple> &tuples) {
 	// TODO: Detect sequential inserts?
 	for (auto &tuple : tuples)
@@ -43,7 +44,7 @@ void Database<IndexT, KeyT>::insert(const std::vector<Tuple> &tuples) {
 }
 // -----------------------------------------------------------------
 template <template <typename, typename> typename IndexT, typename KeyT>
-	requires IndexC<IndexT, KeyT>
+	requires IndexInterface<IndexT, KeyT>
 Database<IndexT, KeyT>::Tuple Database<IndexT, KeyT>::get(const KeyT &key) {
 	// Get TID for key
 	auto maybe_tid = index.lookup(key);
@@ -63,14 +64,13 @@ Database<IndexT, KeyT>::Tuple Database<IndexT, KeyT>::get(const KeyT &key) {
 }
 // -----------------------------------------------------------------
 template <template <typename, typename> typename IndexT, typename KeyT>
-	requires IndexC<IndexT, KeyT>
+	requires IndexInterface<IndexT, KeyT>
 void Database<IndexT, KeyT>::erase(const KeyT & /*key*/) {
 	// TODO. Also update stats here.
 	throw std::logic_error("Database<IndexT>::erase(): Not implemented yet.");
 }
 // -----------------------------------------------------------------
 // Explicit instantiations
-// template class Database<std::unordered_map, uint64_t>;
-template class Database<BTree, uint64_t>;
-template class Database<Map, uint64_t>;
+template class Database<BTree, UInt64>;
+template class Database<Map, UInt64>;
 } // namespace bbbtree

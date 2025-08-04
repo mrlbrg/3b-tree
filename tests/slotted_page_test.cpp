@@ -31,7 +31,7 @@ TEST(SlottedPage, PageFull) {
 
 	// Allocating space exceeding page space should throw and not allocate
 	// anything.
-	EXPECT_THROW(page->allocate(page_size, page_size), std::logic_error);
+	EXPECT_THROW(page->allocate(page_size), std::logic_error);
 	EXPECT_EQ(page->header.slot_count, 0);
 	EXPECT_EQ(page->header.data_start, page_size);
 }
@@ -44,23 +44,21 @@ TEST(SlottedPage, Allocate) {
 	auto *page = new (&buffer[0]) bbbtree::SlottedPage(page_size);
 
 	// Allocating 1 byte
-	EXPECT_NO_THROW(page->allocate(1, page_size));
+	EXPECT_NO_THROW(page->allocate(1));
 	EXPECT_EQ(page->header.slot_count, 1);
 	EXPECT_EQ(page->header.data_start, page_size - 1);
 
 	// Allocating the rest of the page
 	EXPECT_NO_THROW(page->allocate(page_size - sizeof(bbbtree::SlottedPage) -
-									   sizeof(bbbtree::SlottedPage::Slot) * 2 -
-									   1,
-								   page_size));
+								   sizeof(bbbtree::SlottedPage::Slot) * 2 - 1));
 	EXPECT_EQ(page->header.slot_count, 2);
 	EXPECT_EQ(page->header.data_start,
 			  sizeof(bbbtree::SlottedPage) +
 				  sizeof(bbbtree::SlottedPage::Slot) * 2);
-	EXPECT_EQ(page->get_free_space(), 0);
+	EXPECT_EQ(page->get_free_space(), (size_t)0);
 
 	/// Allocating one more should throw, because the page is full.
-	EXPECT_THROW(page->allocate(1, page_size), std::logic_error);
+	EXPECT_THROW(page->allocate(1), std::logic_error);
 }
 
 /// Slotted Page erases space.
@@ -71,11 +69,11 @@ TEST(SlottedPage, Erase) {
 	auto *page = new (&buffer[0]) bbbtree::SlottedPage(page_size);
 
 	// Allocate
-	auto slot_id = page->allocate(1, 1024);
+	auto slot_id = page->allocate(1);
 	EXPECT_EQ(page->header.slot_count, 1);
-	page->allocate(1, 1024);
+	page->allocate(1);
 	EXPECT_EQ(page->header.slot_count, 2);
-	page->allocate(1, 1024);
+	page->allocate(1);
 	EXPECT_EQ(page->header.slot_count, 3);
 
 	// Erase

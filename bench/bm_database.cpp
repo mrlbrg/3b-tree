@@ -1,6 +1,7 @@
 #include "bbbtree/btree.h"
 #include "bbbtree/database.h"
 #include "bbbtree/map.h"
+#include "bbbtree/types.h"
 
 #include <algorithm>
 #include <benchmark/benchmark.h>
@@ -12,7 +13,7 @@
 using namespace bbbtree;
 
 namespace {
-using KeyT = uint64_t;
+using KeyT = UInt64;
 using OutOfMemoryDatabase = Database<BTree, KeyT>;
 using InMemoryDatabase = Database<Map, KeyT>;
 
@@ -25,7 +26,7 @@ std::vector<typename TestDatabase::Tuple> GetTuples(size_t num_tuples) {
 	std::unordered_map<KeyT, uint8_t> unique_keys;
 
 	std::mt19937_64 rng(42); // Fixed seed for reproducibility
-	std::uniform_int_distribution<KeyT> dist;
+	std::uniform_int_distribution<uint64_t> dist;
 
 	// Generate random unique keys
 	while (unique_keys.size() < num_tuples) {

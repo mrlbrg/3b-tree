@@ -1,5 +1,6 @@
 #include "bbbtree/map.h"
 #include "bbbtree/tuple_id.h"
+#include "bbbtree/types.h"
 
 #include <optional>
 
@@ -28,7 +29,6 @@ bool Map<KeyT, ValueT>::insert(const KeyT &key, const ValueT &value) {
 }
 // -----------------------------------------------------------------
 // Explicit instantiations
-template class Map<uint64_t, uint64_t>;
-template class Map<uint64_t, TID>;
+template class Map<UInt64, TID>;
 // -----------------------------------------------------------------
 } // namespace bbbtree

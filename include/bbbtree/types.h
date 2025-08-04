@@ -1,28 +1,96 @@
 #pragma once
 
+#include <cassert>
+#include <cstddef>
 #include <cstdint>
+#include <iostream>
 
 namespace bbbtree {
+// -----------------------------------------------------------------
 /// A SegmentID corresponds to a file.
 using SegmentID = uint16_t;
 /// A Page within a Segment.
 using PageID = uint64_t;
 /// A Slot within a Page.
 using SlotID = uint16_t;
-
-/// The Segment and Page ID within one int. TODO: Delete.
-struct SegmentPageID {
+// -----------------------------------------------------------------
+struct UInt64 {
+	/// Default Constructor.
+	UInt64() = default;
 	/// Constructor.
-	SegmentPageID(SegmentID segment_id, PageID page_id)
-		: value(static_cast<uint64_t>(segment_id) << 48 | page_id) {}
+	UInt64(uint64_t value) : value(value) {};
+	// /// Copy Constructor.
+	// UInt64(const UInt64 &other) { value = other.value; }
 
-	/// Extract the segment ID from the value.
-	SegmentID get_segment_id() { return value >> 48; }
+	/// Size of the serialized value.
+	static constexpr uint16_t size() { return sizeof(value); }
+	/// Serialize the value into bytes to store on pages.
+	const std::byte *serialize() const {
+		return reinterpret_cast<const std::byte *>(&value);
+	}
+	/// Deserializes the bytes into the type.
+	static UInt64 deserialize(const std::byte *data, uint16_t size) {
+		assert(size == sizeof(uint64_t));
+		return UInt64(*reinterpret_cast<const uint64_t *>(data));
+	}
 
-	/// Extract the page ID from the value.
-	PageID get_segment_page_id() { return value & ((1ull << 48) - 1); }
+	/// Spaceship operator.
+	auto operator<=>(const UInt64 &) const = default;
+	/// Prints out value.
+	friend std::ostream &operator<<(std::ostream &os, const UInt64 &value);
+	/// Hashes the value.
+	friend struct std::hash<UInt64>;
 
-	/// Segment ID (16 bit) | Page ID (48 bit)
+  private:
 	uint64_t value;
 };
+
+/// Beware that this object is not the owner of its buffer. Must manage lifetime
+/// of the data its pointing to. TODO: Must update this when
+/// multi-threading/when objects on nodes become mutable.
+struct String {
+	/// Default Constructor.
+	String() = default;
+	/// Constructor.
+	String(std::string_view view) : view(view) {};
+	// /// Copy Constructor. TODO: Breakpoint where we use it and if we can
+	// delete
+	// /// it.
+	// String(const String &other) { view = other.view; }
+
+	/// Size of the wrapped value.
+	uint16_t size() const { return view.size(); }
+	/// Serializes this type into bytes to store on pages.
+	const std::byte *serialize() const {
+		return reinterpret_cast<const std::byte *>(view.data());
+	}
+	/// Deserializes the bytes into the type.
+	static String deserialize(const std::byte *data, uint16_t size) {
+		return String({reinterpret_cast<const char *>(data), size});
+	}
+
+	/// Spaceship operator.
+	auto operator<=>(const String &) const = default;
+	/// Prints out value.
+	friend std::ostream &operator<<(std::ostream &os, const String &value);
+	/// Hashes the value.
+	friend struct std::hash<String>;
+
+  private:
+	std::string_view view;
+};
+// -----------------------------------------------------------------
 } // namespace bbbtree
+// -----------------------------------------------------------------
+namespace std {
+template <> struct hash<bbbtree::UInt64> {
+	size_t operator()(const bbbtree::UInt64 &type) const {
+		return std::hash<uint64_t>()(type.value);
+	}
+};
+template <> struct hash<bbbtree::String> {
+	size_t operator()(const bbbtree::String &type) const {
+		return std::hash<std::string_view>()(type.view);
+	}
+};
+} // namespace std

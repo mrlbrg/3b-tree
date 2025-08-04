@@ -1,7 +1,9 @@
 #include "bbbtree/btree.h"
 #include "bbbtree/buffer_manager.h"
+#include "bbbtree/types.h"
 
 #include <cstddef>
+#include <functional>
 #include <gtest/gtest.h>
 #include <memory>
 #include <optional>
@@ -11,15 +13,15 @@ using namespace bbbtree;
 
 namespace {
 
-using Key = uint64_t;
-using Value = uint64_t;
+using KeyT = UInt64;
+using ValueT = UInt64;
 
 static const constexpr size_t BTREE_SEGMENT_ID = 834;
 static const constexpr size_t TEST_PAGE_SIZE = 256;
 static const constexpr size_t TEST_NUM_PAGES = 10;
 const uint64_t TUPLES_PER_LEAF =
-	(TEST_PAGE_SIZE - 8) / (8 + sizeof(Key) + sizeof(Value));
-const uint64_t TUPLES_PER_NODE = (TEST_PAGE_SIZE - 16) / (16 + sizeof(Key));
+	(TEST_PAGE_SIZE - 8) / (8 + sizeof(KeyT) + sizeof(ValueT));
+const uint64_t TUPLES_PER_NODE = (TEST_PAGE_SIZE - 16) / (16 + sizeof(KeyT));
 
 class BTreeTest : public ::testing::Test {
   protected:
@@ -30,8 +32,8 @@ class BTreeTest : public ::testing::Test {
 		buffer_manager_ = std::make_unique<BufferManager>(
 			TEST_PAGE_SIZE, TEST_NUM_PAGES, clear_files);
 		// Destroy & create new B-Tree.
-		btree_ = std::make_unique<BTree<Key, Value>>(BTREE_SEGMENT_ID,
-													 *buffer_manager_);
+		btree_ = std::make_unique<BTree<KeyT, ValueT>>(BTREE_SEGMENT_ID,
+													   *buffer_manager_);
 	}
 
 	// Create a blank B-Tree.
@@ -39,16 +41,16 @@ class BTreeTest : public ::testing::Test {
 
 	void TearDown() override {}
 
-	std::unordered_map<Key, Value> Seed(size_t num_tuples) {
-		std::unordered_map<Key, Value> expected_map;
+	std::unordered_map<KeyT, ValueT> Seed(size_t num_tuples) {
+		std::unordered_map<KeyT, ValueT> expected_map;
 
 		std::mt19937_64 rng(42); // Fixed seed for reproducibility
 		std::uniform_int_distribution<uint64_t> dist;
 
 		// Generate random tuples with unique keys
 		while (expected_map.size() < num_tuples) {
-			Key key = dist(rng);
-			Value value = dist(rng);
+			KeyT key = dist(rng);
+			ValueT value = dist(rng);
 
 			if (expected_map.count(key) == 0) {
 				EXPECT_TRUE(btree_->insert(key, value));
@@ -65,7 +67,7 @@ class BTreeTest : public ::testing::Test {
 	/// The Buffer Manager of the B-Tree.
 	std::unique_ptr<BufferManager> buffer_manager_;
 	/// The B-Tree under test.
-	std::unique_ptr<BTree<Key, Value>> btree_;
+	std::unique_ptr<BTree<KeyT, ValueT>> btree_;
 };
 
 // TODO: Add test that checks that all pages are not in use after using the
@@ -138,5 +140,42 @@ TEST_F(BTreeTest, InnerNodeSplits) {
 		EXPECT_EQ(res.value(), v);
 	}
 }
-/// Search of an empty node works as expected.
+/// A tree can store variable sized keys.
+TEST_F(BTreeTest, VariableSizeKeys) {
+	String str1{"Hello World!"};
+	String str2{"How are you today?"};
+	String str3{"Hallo Welt!!"};
+
+	auto buffer_manager = BufferManager(TEST_PAGE_SIZE, TEST_NUM_PAGES, true);
+	auto btree = BTree<String, ValueT>(BTREE_SEGMENT_ID, *buffer_manager_);
+
+	// CONTINUE HERE: Fix this test for strings. Should not work yet.
+	EXPECT_TRUE(btree.insert(str1, 1));
+	EXPECT_FALSE(btree.insert(str1, 1));
+
+	EXPECT_TRUE(btree.insert(str2, 2));
+
+	EXPECT_TRUE(btree.insert(str3, 2));
+
+	EXPECT_EQ(btree.lookup(str1), 1);
+	EXPECT_EQ(btree.lookup(str2), 2);
+	EXPECT_EQ(btree.lookup(str3), 2);
+}
+/// A tree cannot store entries bigger than a page.
+TEST_F(BTreeTest, TooLargeKeys) {
+	std::vector<std::byte> buffer(TEST_PAGE_SIZE);
+	String str{{reinterpret_cast<char *>(&buffer[0]), buffer.size()}};
+
+	auto buffer_manager = BufferManager(TEST_PAGE_SIZE, TEST_NUM_PAGES, true);
+	auto btree = BTree<String, ValueT>(BTREE_SEGMENT_ID, *buffer_manager_);
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-result"
+	EXPECT_THROW(btree.insert(str, 1), std::logic_error);
+#pragma GCC diagnostic pop
+}
+/// Can maintain a tree where nodes have single entries.
+TEST_F(BTreeTest, LargeKeys) {}
+/// A tree can store variable sized values.
+TEST_F(BTreeTest, VariabelSizeValues) {}
 } // namespace

@@ -10,11 +10,12 @@
 #include <deque>
 #include <iostream>
 #include <optional>
+#include <stdexcept>
 #include <vector>
 
 namespace bbbtree {
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
+template <Indexable KeyT, typename ValueT>
 BTree<KeyT, ValueT>::BTree(SegmentID segment_id, BufferManager &buffer_manager)
 	: Segment(segment_id, buffer_manager) {
 	// TODO: Create some meta-data segment that stores information like the
@@ -32,15 +33,14 @@ BTree<KeyT, ValueT>::BTree(SegmentID segment_id, BufferManager &buffer_manager)
 		next_free_page = 2;
 		// Intialize root node.
 		auto &root_page = buffer_manager.fix_page(segment_id, root, true);
-		new (root_page.get_data()) LeafNode(buffer_manager.get_page_size());
+		new (root_page.get_data()) LeafNode(buffer_manager.page_size);
 		buffer_manager.unfix_page(root_page, true);
 	}
 
 	buffer_manager.unfix_page(frame, false);
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
-BTree<KeyT, ValueT>::~BTree() {
+template <Indexable KeyT, typename ValueT> BTree<KeyT, ValueT>::~BTree() {
 	// Write out all meta-data needed to pick up index again later.
 	// Caller must make sure that Buffer Manager is destroyed after this,
 	// not before.
@@ -51,7 +51,7 @@ BTree<KeyT, ValueT>::~BTree() {
 	buffer_manager.unfix_page(frame, true);
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
+template <Indexable KeyT, typename ValueT>
 std::optional<ValueT> BTree<KeyT, ValueT>::lookup(const KeyT &key) {
 	auto &leaf_frame = get_leaf(key, false);
 	auto &leaf = *reinterpret_cast<LeafNode *>(leaf_frame.get_data());
@@ -64,12 +64,12 @@ std::optional<ValueT> BTree<KeyT, ValueT>::lookup(const KeyT &key) {
 	return result;
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
+template <Indexable KeyT, typename ValueT>
 void BTree<KeyT, ValueT>::erase(const KeyT & /*key*/) {
 	throw std::logic_error("BTree::erase(): Not implemented yet.");
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
+template <Indexable KeyT, typename ValueT>
 BufferFrame &BTree<KeyT, ValueT>::get_leaf(const KeyT &key, bool exclusive) {
 	// TODO: When multithreading, we only want the leaf to be locked
 	// exclusively. Must not lock all exclusively on the path here. Start with
@@ -95,8 +95,18 @@ BufferFrame &BTree<KeyT, ValueT>::get_leaf(const KeyT &key, bool exclusive) {
 	return *frame;
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
+template <Indexable KeyT, typename ValueT>
 bool BTree<KeyT, ValueT>::insert(const KeyT &key, const ValueT &value) {
+	// Sanity check
+	{
+		auto page_size = buffer_manager.page_size;
+		auto required_leaf_size = key.size() + sizeof(value);
+		auto required_node_size = key.size();
+		if ((required_leaf_size > page_size - LeafNode::min_space) ||
+			(required_node_size > page_size - InnerNode::min_space))
+			throw std::logic_error("BTree::insert(): Key too large.");
+	}
+
 restart:
 	// TODO: This frame is not locked exclusively.
 	auto &leaf_frame = get_leaf(key, true);
@@ -123,7 +133,7 @@ restart:
 	return true;
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
+template <Indexable KeyT, typename ValueT>
 PageID BTree<KeyT, ValueT>::get_new_page() {
 	// TODO: Synchronize this when multi-threading.
 	auto page_id = next_free_page;
@@ -133,7 +143,7 @@ PageID BTree<KeyT, ValueT>::get_new_page() {
 }
 
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
+template <Indexable KeyT, typename ValueT>
 void BTree<KeyT, ValueT>::split(const KeyT &key) {
 	// No frames are to be held at this point.
 	auto *frame = &buffer_manager.fix_page(segment_id, root, true);
@@ -155,18 +165,18 @@ void BTree<KeyT, ValueT>::split(const KeyT &key) {
 	auto &leaf = *reinterpret_cast<LeafNode *>(curr_node);
 	const auto new_pid = get_new_page();
 	auto &new_leaf_frame = buffer_manager.fix_page(segment_id, new_pid, true);
-	auto &new_leaf = *(new (new_leaf_frame.get_data())
-						   LeafNode(buffer_manager.get_page_size()));
-	const auto *pivot = &leaf.split(new_leaf, buffer_manager.get_page_size());
+	auto &new_leaf =
+		*(new (new_leaf_frame.get_data()) LeafNode(buffer_manager.page_size));
+	const auto pivot = leaf.split(new_leaf, buffer_manager.page_size);
 	locked_path.push_back(&new_leaf_frame);
 
 	assert(height > 0);
 	int insertion_level = height - 1; // Leaf level.
 	--insertion_level; // Insertion starts above leaf level. Can be -1.
 
-	// Never release a page which owns this key from the path before its copied
-	// to the parent!
-	std::vector<std::pair<const KeyT *, const PageID>> insertion_queue{
+	// Never release or split a page which owns this key from the path before
+	// its copied to the parent!
+	std::vector<std::pair<const KeyT, const PageID>> insertion_queue{
 		{pivot, new_pid}};
 
 	// A new pivot must be inserted into the parent.
@@ -177,7 +187,7 @@ void BTree<KeyT, ValueT>::split(const KeyT &key) {
 			root = get_new_page();
 			auto &root_frame = buffer_manager.fix_page(segment_id, root, true);
 			new (root_frame.get_data())
-				InnerNode(buffer_manager.get_page_size(), height++, old_root);
+				InnerNode(buffer_manager.page_size, height++, old_root);
 			locked_path.push_front(&root_frame);
 			insertion_level = 0;
 		}
@@ -193,20 +203,22 @@ void BTree<KeyT, ValueT>::split(const KeyT &key) {
 		insertion_queue.pop_back();
 
 		// Cascarding split?
-		if (!node.has_space(*new_pivot)) {
+		if (!node.has_space(new_pivot)) {
 			// Create new node.
 			const auto newer_child = get_new_page();
 			auto &new_frame =
 				buffer_manager.fix_page(segment_id, newer_child, true);
 			auto &new_node = *(new (new_frame.get_data()) InnerNode(
-				buffer_manager.get_page_size(), node.level, node.get_upper()));
+				buffer_manager.page_size, node.level, node.get_upper()));
 
-			// Split.
-			const auto &newer_pivot =
-				node.split(new_node, buffer_manager.get_page_size());
+			// Split. Must not release any pages since these pivots might
+			// reference the node's keys (e.g. String is a view on the key on
+			// the node).
+			const auto newer_pivot =
+				node.split(new_node, buffer_manager.page_size);
 
 			// Update insertion queue.
-			insertion_queue.push_back({&newer_pivot, newer_child});
+			insertion_queue.push_back({newer_pivot, newer_child});
 			insertion_queue.push_back({new_pivot, new_child});
 
 			// Update lock path: New node might be on path now.
@@ -221,7 +233,7 @@ void BTree<KeyT, ValueT>::split(const KeyT &key) {
 			continue;
 		}
 
-		bool success = node.insert_split(*new_pivot, new_child);
+		bool success = node.insert_split(new_pivot, new_child);
 		assert(success);
 		--insertion_level;
 	}
@@ -232,8 +244,7 @@ void BTree<KeyT, ValueT>::split(const KeyT &key) {
 	}
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
-void BTree<KeyT, ValueT>::print() {
+template <Indexable KeyT, typename ValueT> void BTree<KeyT, ValueT>::print() {
 	// Acquire root to get height of tree.
 	auto &root_frame = buffer_manager.fix_page(segment_id, root, false);
 	auto *node = reinterpret_cast<typename BTree<KeyT, ValueT>::InnerNode *>(
@@ -298,8 +309,7 @@ void BTree<KeyT, ValueT>::print() {
 			  << std::endl;
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
-size_t BTree<KeyT, ValueT>::size() {
+template <Indexable KeyT, typename ValueT> size_t BTree<KeyT, ValueT>::size() {
 	// Acquire root to get height of tree.
 	auto &root_frame = buffer_manager.fix_page(segment_id, root, false);
 	auto *node = reinterpret_cast<typename BTree<KeyT, ValueT>::InnerNode *>(
@@ -354,7 +364,7 @@ size_t BTree<KeyT, ValueT>::size() {
 	return result;
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
+template <Indexable KeyT, typename ValueT>
 size_t BTree<KeyT, ValueT>::height() {
 	auto &frame = buffer_manager.fix_page(segment_id, root, false);
 	auto &root_node = *reinterpret_cast<InnerNode *>(frame.get_data());
@@ -363,27 +373,28 @@ size_t BTree<KeyT, ValueT>::height() {
 	return height;
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
+template <Indexable KeyT, typename ValueT>
+const KeyT
+BTree<KeyT, ValueT>::Node::Slot::get_key(const std::byte *begin) const {
+	assert(key_size);
+	assert(offset);
+	return KeyT::deserialize(begin + offset, key_size);
+}
+// -----------------------------------------------------------------
+template <Indexable KeyT, typename ValueT>
 BTree<KeyT, ValueT>::InnerNode::InnerNode(uint32_t page_size, uint16_t level,
 										  PageID upper)
 	: Node(page_size, level), upper(upper) {
 	// Sanity Check: Node must fit page.
 	assert(page_size > sizeof(InnerNode));
-	static_assert(sizeof(KeyT) <=
-				  std::numeric_limits<typeof(Slot::key_size)>::max());
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
-BTree<KeyT, ValueT>::InnerNode::Slot *
+template <Indexable KeyT, typename ValueT>
+BTree<KeyT, ValueT>::InnerNode::Pivot *
 BTree<KeyT, ValueT>::InnerNode::lower_bound(const KeyT &pivot) {
 	// Compare keys from two slots
-	auto comp = [&](const Slot &slot, const KeyT &key) -> bool {
-		assert(slot.offset > 0);
-		assert(slot.key_size > 0);
-
-		// Get key from slots
-		const auto &slot_key =
-			*reinterpret_cast<KeyT *>(this->get_data() + slot.offset);
+	auto comp = [&](const Pivot &slot, const KeyT &key) -> bool {
+		const auto slot_key = slot.get_key(this->get_data());
 
 		return slot_key < key;
 	};
@@ -391,7 +402,7 @@ BTree<KeyT, ValueT>::InnerNode::lower_bound(const KeyT &pivot) {
 	return std::lower_bound(slots_begin(), slots_end(), pivot, comp);
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
+template <Indexable KeyT, typename ValueT>
 PageID BTree<KeyT, ValueT>::InnerNode::lookup(const KeyT &pivot) {
 	assert(upper);
 	auto *slot = lower_bound(pivot);
@@ -404,9 +415,9 @@ PageID BTree<KeyT, ValueT>::InnerNode::lookup(const KeyT &pivot) {
 	return slot->child;
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
-const KeyT &BTree<KeyT, ValueT>::InnerNode::split(InnerNode &new_node,
-												  size_t page_size) {
+template <Indexable KeyT, typename ValueT>
+const KeyT BTree<KeyT, ValueT>::InnerNode::split(InnerNode &new_node,
+												 size_t page_size) {
 	++stats.inner_node_splits;
 	// Sanity Check.
 	assert(this->slot_count > 1);
@@ -449,7 +460,7 @@ const KeyT &BTree<KeyT, ValueT>::InnerNode::split(InnerNode &new_node,
 	return pivot_slot.get_key(this->get_data());
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
+template <Indexable KeyT, typename ValueT>
 bool BTree<KeyT, ValueT>::InnerNode::insert_split(const KeyT &new_pivot,
 												  PageID new_child) {
 	// Sanity checks.
@@ -465,7 +476,7 @@ bool BTree<KeyT, ValueT>::InnerNode::insert_split(const KeyT &new_pivot,
 		upper = new_child;
 		// Insert slot with <new_pivot, old_upper>
 	} else {
-		const auto &found_pivot = slot_target->get_key(this->get_data());
+		const auto found_pivot = slot_target->get_key(this->get_data());
 		// Keys must be unique. We don't throw here because we don't manage
 		// the lock.
 		if (found_pivot == new_pivot)
@@ -482,21 +493,17 @@ bool BTree<KeyT, ValueT>::InnerNode::insert_split(const KeyT &new_pivot,
 		target_slot = source_slot;
 	}
 	// Insert new slot.
-	this->data_start -= sizeof(KeyT);
-	*slot_target = Slot{old_child, this->data_start,
-						static_cast<uint16_t>(sizeof(new_pivot))};
+	this->data_start -= new_pivot.size();
 	++this->slot_count;
+	*slot_target =
+		Pivot{this->get_data(), this->data_start, new_pivot, old_child};
 	assert(reinterpret_cast<std::byte *>(slots_end()) <=
 		   this->get_data() + this->data_start);
-
-	// Insert pivot.
-	KeyT &pivot_target = slot_target->get_key(this->get_data());
-	pivot_target = new_pivot; // TODO: `KeyT` must implement copy assignment.
 
 	return true;
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
+template <Indexable KeyT, typename ValueT>
 bool BTree<KeyT, ValueT>::InnerNode::insert(const KeyT &new_pivot,
 											PageID new_child) {
 	// Sanity checks.
@@ -504,9 +511,10 @@ bool BTree<KeyT, ValueT>::InnerNode::insert(const KeyT &new_pivot,
 
 	assert(upper);
 
+	// Find target position for new pivotal slot.
 	auto *slot_target = lower_bound(new_pivot);
 	if (slot_target != slots_end()) {
-		const auto &found_pivot = slot_target->get_key(this->get_data());
+		const auto found_pivot = slot_target->get_key(this->get_data());
 		// Keys must be unique. We don't throw here because we don't manage
 		// the lock.
 		if (found_pivot == new_pivot)
@@ -520,21 +528,17 @@ bool BTree<KeyT, ValueT>::InnerNode::insert(const KeyT &new_pivot,
 		target_slot = source_slot;
 	}
 	// Insert new slot.
-	this->data_start -= sizeof(KeyT);
-	*slot_target = Slot{new_child, this->data_start,
-						static_cast<uint16_t>(sizeof(new_pivot))};
+	this->data_start -= new_pivot.size();
 	++this->slot_count;
+	*slot_target =
+		Pivot{this->get_data(), this->data_start, new_pivot, new_child};
 	assert(reinterpret_cast<std::byte *>(slots_end()) <=
 		   this->get_data() + this->data_start);
-
-	// Insert pivot.
-	KeyT &pivot_target = slot_target->get_key(this->get_data());
-	pivot_target = new_pivot; // TODO: `KeyT` must implement copy assignment.
 
 	return true;
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
+template <Indexable KeyT, typename ValueT>
 std::vector<PageID> BTree<KeyT, ValueT>::InnerNode::get_children() {
 	std::vector<PageID> children{};
 	for (uint16_t i = 0; i < this->slot_count; ++i) {
@@ -544,7 +548,7 @@ std::vector<PageID> BTree<KeyT, ValueT>::InnerNode::get_children() {
 	return children;
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
+template <Indexable KeyT, typename ValueT>
 void BTree<KeyT, ValueT>::InnerNode::print() {
 	// Print Header.
 	std::cout << "-----------------------------------------------------"
@@ -558,19 +562,33 @@ void BTree<KeyT, ValueT>::InnerNode::print() {
 	// Print Slots.
 	std::cout << "Slots:" << std::endl;
 	for (const auto *slot = slots_begin(); slot < slots_end(); slot++) {
-		std::cout << "	offset: " << slot->offset;
-		std::cout << ",	key_size: " << slot->key_size;
-		std::cout << ",	pivot: " << slot->get_key(this->get_data());
-		std::cout << ",	child: " << slot->child << std::endl;
+		slot->print(this->get_data());
 	}
 	std::cout << "-----------------------------------------------------"
 			  << std::endl;
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
-const KeyT &BTree<KeyT, ValueT>::LeafNode::split(LeafNode &new_node,
-												 size_t page_size) {
-
+template <Indexable KeyT, typename ValueT>
+BTree<KeyT, ValueT>::InnerNode::Pivot::Pivot(std::byte *page_begin,
+											 uint32_t offset, const KeyT &key,
+											 PageID child)
+	: Node::Slot(offset, key.size()), child(child) {
+	// Store key at offset.
+	std::memcpy(page_begin + offset, key.serialize(), key.size());
+}
+// -----------------------------------------------------------------
+template <Indexable KeyT, typename ValueT>
+void BTree<KeyT, ValueT>::InnerNode::Pivot::print(
+	const std::byte *begin) const {
+	std::cout << "	offset: " << this->offset;
+	std::cout << ",	key_size: " << this->key_size;
+	std::cout << ",	pivot: " << this->get_key(begin);
+	std::cout << ",	child: " << child << std::endl;
+}
+// -----------------------------------------------------------------
+template <Indexable KeyT, typename ValueT>
+const KeyT BTree<KeyT, ValueT>::LeafNode::split(LeafNode &new_node,
+												size_t page_size) {
 	++stats.leaf_node_splits;
 	assert(this->slot_count > 1);
 	assert(page_size > 0);
@@ -613,13 +631,10 @@ const KeyT &BTree<KeyT, ValueT>::LeafNode::split(LeafNode &new_node,
 	return pivot_slot.get_key(this->get_data());
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
-BTree<KeyT, ValueT>::LeafNode::Slot *
+template <Indexable KeyT, typename ValueT>
+BTree<KeyT, ValueT>::LeafNode::LeafSlot *
 BTree<KeyT, ValueT>::LeafNode::lower_bound(const KeyT &key) {
-	auto comp = [&](const Slot &slot, const KeyT &key) -> bool {
-		assert(slot.offset > 0);
-		assert(slot.key_size > 0);
-
+	auto comp = [&](const LeafSlot &slot, const KeyT &key) -> bool {
 		const auto &slot_key = slot.get_key(this->get_data());
 		return slot_key < key;
 	};
@@ -627,22 +642,21 @@ BTree<KeyT, ValueT>::LeafNode::lower_bound(const KeyT &key) {
 	return std::lower_bound(slots_begin(), slots_end(), key, comp);
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
+template <Indexable KeyT, typename ValueT>
 std::optional<ValueT> BTree<KeyT, ValueT>::LeafNode::lookup(const KeyT &key) {
 	auto *slot = lower_bound(key);
 
 	if (slot == slots_end())
 		return {};
 
-	const auto &found_key = slot->get_key(this->get_data());
+	const auto found_key = slot->get_key(this->get_data());
 	if (found_key != key)
 		return {};
 
-	assert(slot->value_size);
 	return {slot->get_value(this->get_data())};
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
+template <Indexable KeyT, typename ValueT>
 bool BTree<KeyT, ValueT>::LeafNode::insert(const KeyT &key,
 										   const ValueT &value) {
 	assert(has_space(key, value));
@@ -663,25 +677,16 @@ bool BTree<KeyT, ValueT>::LeafNode::insert(const KeyT &key,
 		target_slot = source_slot;
 	}
 	// Insert new slot.
-	this->data_start -= (sizeof(KeyT) + sizeof(ValueT));
-	*slot_target = Slot{this->data_start, static_cast<uint16_t>(sizeof(KeyT)),
-						static_cast<uint16_t>(sizeof(ValueT))};
+	this->data_start -= (key.size() + sizeof(ValueT));
 	++this->slot_count;
+	*slot_target = LeafSlot{this->get_data(), this->data_start, key, value};
 	assert(reinterpret_cast<std::byte *>(slots_end()) <=
 		   this->get_data() + this->data_start);
-
-	// Insert key.
-	KeyT &key_target = slot_target->get_key(this->get_data());
-	// TODO: `KeyT` must implement copy assignment.
-	key_target = key;
-	// Insert value.
-	ValueT &value_target = slot_target->get_value(this->get_data());
-	value_target = value;
 
 	return true;
 }
 // -----------------------------------------------------------------
-template <LessEqualComparable KeyT, typename ValueT>
+template <Indexable KeyT, typename ValueT>
 void BTree<KeyT, ValueT>::LeafNode::print() {
 	// Print Header.
 	std::cout << "-----------------------------------------------------"
@@ -694,20 +699,45 @@ void BTree<KeyT, ValueT>::LeafNode::print() {
 	// Print Slots.
 	std::cout << "Slots:" << std::endl;
 	for (const auto *slot = slots_begin(); slot < slots_end(); ++slot) {
-		std::cout << "	offset: " << slot->offset;
-		std::cout << ",	key_size: " << slot->key_size;
-		std::cout << ",	value_size: " << slot->value_size;
-
-		std::cout << ",	key: " << slot->get_key(this->get_data());
-		std::cout << ",	value: " << slot->get_value(this->get_data())
-				  << std::endl;
+		slot->print(this->get_data());
 	}
 	std::cout << "-----------------------------------------------------"
 			  << std::endl;
 }
 // -----------------------------------------------------------------
+template <Indexable KeyT, typename ValueT>
+BTree<KeyT, ValueT>::LeafNode::LeafSlot::LeafSlot(std::byte *page_begin,
+												  uint32_t offset,
+												  const KeyT &key,
+												  const ValueT &value)
+	: Node::Slot(offset, key.size()), value_size(sizeof(value)) {
+	// Copy key and value into the slot's buffer.
+	std::memcpy(page_begin + offset, key.serialize(), key.size());
+	std::memcpy(page_begin + offset + key.size(), &value, sizeof(value));
+};
+// -----------------------------------------------------------------
+template <Indexable KeyT, typename ValueT>
+const ValueT &BTree<KeyT, ValueT>::LeafNode::LeafSlot::get_value(
+	const std::byte *begin) const {
+	assert(value_size);
+	return *reinterpret_cast<const ValueT *>(begin + this->offset +
+											 this->key_size);
+}
+// -----------------------------------------------------------------
+template <Indexable KeyT, typename ValueT>
+void BTree<KeyT, ValueT>::LeafNode::LeafSlot::print(
+	const std::byte *begin) const {
+	std::cout << "	offset: " << this->offset;
+	std::cout << ",	key_size: " << this->key_size;
+	std::cout << ",	value_size: " << value_size;
+
+	std::cout << ",	key: " << this->get_key(begin);
+	std::cout << ",	value: " << get_value(begin) << std::endl;
+}
+// -----------------------------------------------------------------
 // Explicit instantiations
-template struct BTree<uint64_t, uint64_t>;
-template struct BTree<uint64_t, TID>;
+template struct BTree<UInt64, TID>;
+template struct BTree<UInt64, UInt64>;
+template struct BTree<String, UInt64>;
 // -----------------------------------------------------------------
 } // namespace bbbtree

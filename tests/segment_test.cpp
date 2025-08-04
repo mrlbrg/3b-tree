@@ -43,7 +43,7 @@ TEST_F(SegmentTest, Empty) {
 
 	// Can find/update page after creating one.
 	{
-		EXPECT_EQ(fsi->create_new_page(buffer_manager->get_page_size()), 0);
+		EXPECT_EQ(fsi->create_new_page(buffer_manager->page_size), (size_t)0);
 		auto page_id = fsi->find(1024);
 		EXPECT_TRUE(page_id.has_value());
 		EXPECT_EQ(page_id.value(), 0);
@@ -54,7 +54,7 @@ TEST_F(SegmentTest, Empty) {
 
 	// Can append to last page only.
 	{
-		EXPECT_EQ(fsi->create_new_page(buffer_manager->get_page_size()), 1);
+		EXPECT_EQ(fsi->create_new_page(buffer_manager->page_size), 1);
 		EXPECT_EQ(fsi->find(10).value(), 1);
 		// Cannot udpate non-last page
 		EXPECT_THROW(fsi->update(0, 0), std::logic_error);
@@ -66,10 +66,10 @@ TEST_F(SegmentTest, Empty) {
 TEST_F(SegmentTest, Persistency) {
 	// TODO: Destroy FSI segment and create one again. The data should be
 	// persisted.
-	fsi->create_new_page(buffer_manager->get_page_size());
+	fsi->create_new_page(buffer_manager->page_size);
 	Destroy(false);
 
-	EXPECT_TRUE(fsi->find(buffer_manager->get_page_size() / 2));
+	EXPECT_TRUE(fsi->find(buffer_manager->page_size / 2));
 }
 
 TEST_F(SegmentTest, Allocate) {

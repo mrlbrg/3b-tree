@@ -60,21 +60,20 @@ PageID FSISegment::create_new_page(size_t initial_free_space) {
 TID SPSegment::allocate(uint32_t size) {
 	auto create_new_slotted_page = [&]() {
 		// Create new page in Free-Space Inventory
-		auto new_page_id =
-			space_inventory.create_new_page(SlottedPage::get_initial_free_space(
-				buffer_manager.get_page_size()));
+		auto new_page_id = space_inventory.create_new_page(
+			SlottedPage::get_initial_free_space(buffer_manager.page_size));
 		// Create new Slotted Page
 		auto &frame = buffer_manager.fix_page(segment_id, new_page_id, true);
 		auto &slotted_page = this->get_slotted_page(frame);
 		slotted_page.header = SlottedPage::Header{
-			static_cast<uint32_t>(buffer_manager.get_page_size())};
+			static_cast<uint32_t>(buffer_manager.page_size)};
 		buffer_manager.unfix_page(frame, true);
 
 		return new_page_id;
 	};
 
 	// Tuple must be smaller than page
-	auto max_size = buffer_manager.get_page_size() - sizeof(SlottedPage::Slot) -
+	auto max_size = buffer_manager.page_size - sizeof(SlottedPage::Slot) -
 					sizeof(SlottedPage::Header);
 	if (size > max_size)
 		throw std::logic_error("SPSegment::allocate(): Cannot allocate tuples "
@@ -89,7 +88,7 @@ TID SPSegment::allocate(uint32_t size) {
 	auto &slotted_page = get_slotted_page(page);
 
 	// Allocate a new slot on that page
-	auto slot_id = slotted_page.allocate(size, buffer_manager.get_page_size());
+	auto slot_id = slotted_page.allocate(size);
 	space_inventory.update(page_id, slotted_page.get_free_space());
 
 	buffer_manager.unfix_page(page, true);

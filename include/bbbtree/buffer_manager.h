@@ -81,8 +81,8 @@ class BufferManager {
 	/// Releases a page. If dirty, its written to disk eventually.
 	void unfix_page(BufferFrame &frame, bool is_dirty);
 
-	/// Returns a page's size.
-	size_t get_page_size() { return page_size; }
+	/// The size of each page in the buffer.
+	const size_t page_size;
 
   private:
 	/// Gets a free buffer frame. Evicts another page when buffer is full.
@@ -104,8 +104,6 @@ class BufferManager {
 	/// Resets a frame.
 	inline void reset(BufferFrame &frame);
 
-	/// The size of each page in the buffer.
-	size_t page_size;
 	/// The pages' data.
 	std::vector<char> page_data;
 	/// The pages' frames.
