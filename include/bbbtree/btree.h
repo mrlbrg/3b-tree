@@ -40,7 +40,7 @@ concept Indexable = requires(T a, T b, const std::byte *data, uint16_t size) {
 /// re-use/compactify the space nor merge nodes. We leave nodes fragmented.
 /// TODO: We cannot use one file per index if we want to have several trees
 /// later.
-template <Indexable KeyT, typename ValueT> struct BTree final : public Segment {
+template <Indexable KeyT, typename ValueT> struct BTree : public Segment {
 
 	/// Constructor. Not thread-safe.
 	BTree(SegmentID segment_id, BufferManager &buffer_manager);
@@ -69,7 +69,7 @@ template <Indexable KeyT, typename ValueT> struct BTree final : public Segment {
 	/// Not thread-safe.
 	size_t height();
 
-  private:
+  protected:
 	/// TODO: Find a more elegant solution for persistency:
 	/// State is persisted at page 0 of this segment.
 	/// Read and written out at construction/destruction time.
@@ -107,7 +107,6 @@ template <Indexable KeyT, typename ValueT> struct BTree final : public Segment {
 			/// copy from the node. Manage lifetime carefully.
 			const KeyT get_key(const std::byte *begin) const;
 
-		  protected:
 			/// The offset within the page.
 			uint32_t offset;
 			/// The number of bytes from offset to end of key.
@@ -258,8 +257,10 @@ template <Indexable KeyT, typename ValueT> struct BTree final : public Segment {
 		[[nodiscard]] bool insert(const KeyT &key, const ValueT &value);
 
 		/// Splits the leaf and returns the resulting pivotal key to be inserted
-		/// into the parent.
-		[[nodiscard]] const KeyT split(LeafNode &new_node, size_t page_size);
+		/// into the parent. `this` leaf is guaranteed to be the left node and
+		/// `new_node` the right node after splitting.
+		[[nodiscard]] const KeyT split(LeafNode &new_node, const KeyT &key,
+									   size_t page_size);
 
 		/// Print leaf to standard output.
 		void print();
@@ -286,7 +287,7 @@ template <Indexable KeyT, typename ValueT> struct BTree final : public Segment {
 		LeafSlot *slots_end() { return slots_begin() + this->slot_count; }
 
 	  public:
-		/// The minimum of space required on a page to store something.
+		/// The minimum of space required on a page to store a single entry.
 		static const constexpr size_t min_space =
 			sizeof(LeafNode) + sizeof(LeafSlot);
 	};
@@ -306,7 +307,7 @@ template <Indexable KeyT, typename ValueT> struct BTree final : public Segment {
 	/// Traverses tree for given key and splits corresponding leaf.
 	/// Only splits if leaf is full. Another thread might have triggered split
 	/// already. Holds all locks on the path for cascading splits.
-	void split(const KeyT &key);
+	void split(const KeyT &key, const ValueT &value);
 
 	PageID get_new_page();
 };

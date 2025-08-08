@@ -19,8 +19,6 @@ struct UInt64 {
 	UInt64() = default;
 	/// Constructor.
 	UInt64(uint64_t value) : value(value) {};
-	// /// Copy Constructor.
-	// UInt64(const UInt64 &other) { value = other.value; }
 
 	/// Size of the serialized value.
 	static constexpr uint16_t size() { return sizeof(value); }
@@ -29,8 +27,8 @@ struct UInt64 {
 		return reinterpret_cast<const std::byte *>(&value);
 	}
 	/// Deserializes the bytes into the type.
-	static UInt64 deserialize(const std::byte *data, uint16_t size) {
-		assert(size == sizeof(uint64_t));
+	static UInt64 deserialize(const std::byte *data, uint16_t num_bytes) {
+		assert(num_bytes == size());
 		return UInt64(*reinterpret_cast<const uint64_t *>(data));
 	}
 
@@ -53,10 +51,6 @@ struct String {
 	String() = default;
 	/// Constructor.
 	String(std::string_view view) : view(view) {};
-	// /// Copy Constructor. TODO: Breakpoint where we use it and if we can
-	// delete
-	// /// it.
-	// String(const String &other) { view = other.view; }
 
 	/// Size of the wrapped value.
 	uint16_t size() const { return view.size(); }
@@ -65,8 +59,8 @@ struct String {
 		return reinterpret_cast<const std::byte *>(view.data());
 	}
 	/// Deserializes the bytes into the type.
-	static String deserialize(const std::byte *data, uint16_t size) {
-		return String({reinterpret_cast<const char *>(data), size});
+	static String deserialize(const std::byte *data, uint16_t num_bytes) {
+		return String({reinterpret_cast<const char *>(data), num_bytes});
 	}
 
 	/// Spaceship operator.

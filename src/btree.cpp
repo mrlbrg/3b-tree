@@ -117,7 +117,7 @@ restart:
 		// Release locks. Split will acquire its own. Re-acquire lock after
 		// split by traversing to leaf again.
 		buffer_manager.unfix_page(leaf_frame, false);
-		split(key);
+		split(key, value);
 		goto restart;
 	}
 
@@ -144,103 +144,102 @@ PageID BTree<KeyT, ValueT>::get_new_page() {
 
 // -----------------------------------------------------------------
 template <Indexable KeyT, typename ValueT>
-void BTree<KeyT, ValueT>::split(const KeyT &key) {
-	// No frames are to be held at this point.
-	auto *frame = &buffer_manager.fix_page(segment_id, root, true);
-	auto *curr_node = reinterpret_cast<InnerNode *>(frame->get_data());
-	std::deque<BufferFrame *> locked_path{frame};
+void BTree<KeyT, ValueT>::split(const KeyT &key, const ValueT &value) {
+	using Pivot = std::pair<const KeyT, const PageID>;
 
-	// Collect all nodes on path to leaf for given key.
-	while (!curr_node->is_leaf()) {
-		frame =
-			&buffer_manager.fix_page(segment_id, curr_node->lookup(key), true);
-		locked_path.push_back(frame);
-		curr_node = reinterpret_cast<InnerNode *>(frame->get_data());
-	}
-	auto height = locked_path.size();
-	// TODO: When multithreading, another thread might have already split.
-	// Release everything and do nothing in that case.
+	while (true) { // No frames are to be held at this point.
+		auto *curr_frame = &buffer_manager.fix_page(segment_id, root, true);
+		auto *curr_node = reinterpret_cast<InnerNode *>(curr_frame->get_data());
+		// All nodes that lie on the path to the key with the leaf at front and
+		// root in back.
+		std::deque<BufferFrame *> path{curr_frame};
+		// All nodes we touch are locked. Must be released in the end.
+		std::vector<BufferFrame *> locked_nodes{curr_frame};
 
-	// Split Leaf.
-	auto &leaf = *reinterpret_cast<LeafNode *>(curr_node);
-	const auto new_pid = get_new_page();
-	auto &new_leaf_frame = buffer_manager.fix_page(segment_id, new_pid, true);
-	auto &new_leaf =
-		*(new (new_leaf_frame.get_data()) LeafNode(buffer_manager.page_size));
-	const auto pivot = leaf.split(new_leaf, buffer_manager.page_size);
-	locked_path.push_back(&new_leaf_frame);
+		// Collect all nodes on path to leaf for given key.
+		while (!curr_node->is_leaf()) {
+			curr_frame = &buffer_manager.fix_page(segment_id,
+												  curr_node->lookup(key), true);
+			path.push_front(curr_frame);
+			locked_nodes.push_back(curr_frame);
+			curr_node = reinterpret_cast<InnerNode *>(curr_frame->get_data());
+		}
+		assert(path.size() >= 1);
+		auto max_level = path.size() - 1;
 
-	assert(height > 0);
-	int insertion_level = height - 1; // Leaf level.
-	--insertion_level; // Insertion starts above leaf level. Can be -1.
-
-	// Never release or split a page which owns this key from the path before
-	// its copied to the parent!
-	std::vector<std::pair<const KeyT, const PageID>> insertion_queue{
-		{pivot, new_pid}};
-
-	// A new pivot must be inserted into the parent.
-	while (!insertion_queue.empty()) {
-		// Arrived at root? Create new root.
-		if (insertion_level < 0) {
-			auto old_root = root;
-			root = get_new_page();
-			auto &root_frame = buffer_manager.fix_page(segment_id, root, true);
-			new (root_frame.get_data())
-				InnerNode(buffer_manager.page_size, height++, old_root);
-			locked_path.push_front(&root_frame);
-			insertion_level = 0;
+		// We stop when the target leaf fits the new key-value-pair.
+		auto *leaf = reinterpret_cast<LeafNode *>(path.at(0)->get_data());
+		if (leaf->has_space(key, value)) {
+			// Release path. TODO: Don't mark all as dirty.
+			for (auto *frame : locked_nodes)
+				buffer_manager.unfix_page(*frame, true);
+			break;
 		}
 
-		assert(0 <= insertion_level);
-		assert(insertion_level < static_cast<int>(height));
+		// Split leaf.
+		const auto new_pid = get_new_page();
+		auto *new_leaf_frame =
+			&buffer_manager.fix_page(segment_id, new_pid, true);
+		auto *new_leaf = (new (new_leaf_frame->get_data())
+							  LeafNode(buffer_manager.page_size));
+		const auto pivot =
+			leaf->split(*new_leaf, key, buffer_manager.page_size);
+		locked_nodes.push_back(new_leaf_frame);
+		std::vector<Pivot> insertion_queue{{pivot, new_pid}};
 
-		auto &frame = *locked_path[insertion_level];
-		auto &node = *reinterpret_cast<InnerNode *>(frame.get_data());
-		assert(node.level == (height - 1 - insertion_level));
-
-		auto [new_pivot, new_child] = insertion_queue.back();
-		insertion_queue.pop_back();
-
-		// Cascarding split?
-		if (!node.has_space(new_pivot)) {
-			// Create new node.
-			const auto newer_child = get_new_page();
-			auto &new_frame =
-				buffer_manager.fix_page(segment_id, newer_child, true);
-			auto &new_node = *(new (new_frame.get_data()) InnerNode(
-				buffer_manager.page_size, node.level, node.get_upper()));
-
-			// Split. Must not release any pages since these pivots might
-			// reference the node's keys (e.g. String is a view on the key on
-			// the node).
-			const auto newer_pivot =
-				node.split(new_node, buffer_manager.page_size);
-
-			// Update insertion queue.
-			insertion_queue.push_back({newer_pivot, newer_child});
-			insertion_queue.push_back({new_pivot, new_child});
-
-			// Update lock path: New node might be on path now.
-			if (key > newer_pivot) {
-				locked_path[insertion_level] = &new_frame;
-				locked_path.push_back(&frame);
-			} else {
-				locked_path.push_back(&new_frame);
+		size_t curr_level = 1;
+		// Propagate splits along path.
+		while (!insertion_queue.empty()) {
+			// Arrived at root? Create new root.
+			if (curr_level > max_level) {
+				auto old_root = root;
+				root = get_new_page();
+				auto *root_frame =
+					&buffer_manager.fix_page(segment_id, root, true);
+				new (root_frame->get_data())
+					InnerNode(buffer_manager.page_size, ++max_level, old_root);
+				locked_nodes.push_back(root_frame);
+				path.push_back(root_frame);
+				assert(max_level == curr_level);
 			}
 
-			// Retry current insertion.
-			continue;
+			// Insert split into parent.
+			curr_frame = path.at(curr_level);
+			curr_node = reinterpret_cast<InnerNode *>(curr_frame->get_data());
+			auto [curr_key, curr_pid] = insertion_queue.back();
+
+			// Split inner node. Moving up.
+			if (!curr_node->has_space(curr_key)) {
+				// Create new node.
+				const auto new_pid = get_new_page();
+				auto *new_frame =
+					&buffer_manager.fix_page(segment_id, new_pid, true);
+				auto *new_node = (new (new_frame->get_data()) InnerNode(
+					buffer_manager.page_size, curr_node->level,
+					curr_node->get_upper()));
+				locked_nodes.push_back(new_frame);
+				const auto new_pivot =
+					curr_node->split(*new_node, buffer_manager.page_size);
+				insertion_queue.push_back({new_pivot, new_pid});
+				// Update path to insert split.
+				if (new_pivot < curr_key)
+					path.at(curr_level) = new_frame;
+				// Insert this new split directly into parent.
+				++curr_level;
+				continue;
+			}
+
+			// Moving down.
+			bool success = curr_node->insert_split(curr_key, curr_pid);
+			assert(success);
+			insertion_queue.pop_back();
+			assert(curr_level > 0);
+			--curr_level;
 		}
 
-		bool success = node.insert_split(new_pivot, new_child);
-		assert(success);
-		--insertion_level;
-	}
-
-	// Release path. TODO: Don't mark all as dirty.
-	for (auto *frame : locked_path) {
-		buffer_manager.unfix_page(*frame, true);
+		// Release path. TODO: Don't mark all as dirty.
+		for (auto *frame : locked_nodes)
+			buffer_manager.unfix_page(*frame, true);
 	}
 }
 // -----------------------------------------------------------------
@@ -252,14 +251,15 @@ template <Indexable KeyT, typename ValueT> void BTree<KeyT, ValueT>::print() {
 	auto level = node->level;
 	buffer_manager.unfix_page(root_frame, false);
 
-	std::cout << "BTree:" << std::endl;
-	std::cout << "	root: " << root << std::endl;
-	std::cout << "	next_free_page: " << next_free_page << std::endl;
+	std::cout << std::endl;
+	std::cout << "root: " << root << std::endl;
+	std::cout << "next_free_page: " << next_free_page << std::endl;
 
 	// Traverse and print each level of nodes.
 	std::vector<PageID> nodes_on_current_level{root};
 
 	while (level > 0) {
+		std::cout << std::endl;
 		std::cout << "################ LEVEL " << level << " ###############"
 				  << std::endl;
 		// Print current level & collect their children.
@@ -273,9 +273,10 @@ template <Indexable KeyT, typename ValueT> void BTree<KeyT, ValueT>::print() {
 
 			// Sanity Check.
 			assert(node->level == level);
-
-			std::cout << "PID " << pid << std::endl;
+			std::cout << "PID " << pid;
 			node->print();
+			std::cout << "-----------------------------------------------------"
+					  << std::endl;
 
 			// Collect children
 			for (auto child : node->get_children()) {
@@ -300,8 +301,10 @@ template <Indexable KeyT, typename ValueT> void BTree<KeyT, ValueT>::print() {
 		// Sanity Check.
 		assert(leaf->level == level);
 
-		std::cout << "PID " << pid << std::endl;
+		std::cout << "PID " << pid;
 		leaf->print();
+		std::cout << "-----------------------------------------------------"
+				  << std::endl;
 
 		buffer_manager.unfix_page(frame, false);
 	}
@@ -332,7 +335,6 @@ template <Indexable KeyT, typename ValueT> size_t BTree<KeyT, ValueT>::size() {
 			// Sanity Check.
 			assert(node->level == level);
 			assert(node->get_upper());
-			assert(node->slot_count);
 
 			// Collect children
 			for (auto child : node->get_children()) {
@@ -420,7 +422,7 @@ const KeyT BTree<KeyT, ValueT>::InnerNode::split(InnerNode &new_node,
 												 size_t page_size) {
 	++stats.inner_node_splits;
 	// Sanity Check.
-	assert(this->slot_count > 1);
+	assert(this->slot_count > 0);
 	// Buffer the node.
 	std::vector<std::byte> buffer{page_size};
 	std::memcpy(&buffer[0], this, page_size);
@@ -455,6 +457,8 @@ const KeyT BTree<KeyT, ValueT>::InnerNode::split(InnerNode &new_node,
 	const auto &pivot_slot = *(slots_end() - 1);
 	upper = pivot_slot.child;
 	--this->slot_count;
+	this->data_start += pivot_slot.key_size;
+	assert(this->data_start <= page_size);
 
 	// Returning a reference to a deleted slot. Use with care.
 	return pivot_slot.get_key(this->get_data());
@@ -465,7 +469,6 @@ bool BTree<KeyT, ValueT>::InnerNode::insert_split(const KeyT &new_pivot,
 												  PageID new_child) {
 	// Sanity checks.
 	assert(has_space(new_pivot));
-
 	assert(upper);
 
 	auto *slot_target = lower_bound(new_pivot);
@@ -483,8 +486,8 @@ bool BTree<KeyT, ValueT>::InnerNode::insert_split(const KeyT &new_pivot,
 			return false;
 
 		old_child = slot_target->child;
+		slot_target->child = new_child;
 	}
-	slot_target->child = new_child;
 
 	// Move each slot up by one to make space for new one.
 	for (auto *slot = slots_end(); slot > slot_target; --slot) {
@@ -551,21 +554,15 @@ std::vector<PageID> BTree<KeyT, ValueT>::InnerNode::get_children() {
 template <Indexable KeyT, typename ValueT>
 void BTree<KeyT, ValueT>::InnerNode::print() {
 	// Print Header.
-	std::cout << "-----------------------------------------------------"
-			  << std::endl;
-	std::cout << "Header:" << std::endl;
-	std::cout << "	data_start: " << this->data_start << std::endl;
-	std::cout << "	level: " << this->level << std::endl;
-	std::cout << "	slot_count: " << this->slot_count << std::endl;
-	std::cout << "	upper: " << upper << std::endl;
+	std::cout << "	data_start: " << this->data_start;
+	std::cout << ", level: " << this->level;
+	std::cout << ", slot_count: " << this->slot_count << std::endl;
 
 	// Print Slots.
-	std::cout << "Slots:" << std::endl;
 	for (const auto *slot = slots_begin(); slot < slots_end(); slot++) {
 		slot->print(this->get_data());
 	}
-	std::cout << "-----------------------------------------------------"
-			  << std::endl;
+	std::cout << "  upper: " << upper << std::endl;
 }
 // -----------------------------------------------------------------
 template <Indexable KeyT, typename ValueT>
@@ -580,31 +577,41 @@ BTree<KeyT, ValueT>::InnerNode::Pivot::Pivot(std::byte *page_begin,
 template <Indexable KeyT, typename ValueT>
 void BTree<KeyT, ValueT>::InnerNode::Pivot::print(
 	const std::byte *begin) const {
-	std::cout << "	offset: " << this->offset;
-	std::cout << ",	key_size: " << this->key_size;
-	std::cout << ",	pivot: " << this->get_key(begin);
-	std::cout << ",	child: " << child << std::endl;
+	std::cout << "  offset: " << this->offset;
+	std::cout << ", key_size: " << this->key_size;
+	std::cout << ", pivot: " << this->get_key(begin);
+	std::cout << ", child: " << child << std::endl;
 }
 // -----------------------------------------------------------------
 template <Indexable KeyT, typename ValueT>
 const KeyT BTree<KeyT, ValueT>::LeafNode::split(LeafNode &new_node,
+												const KeyT &key,
 												size_t page_size) {
+
 	++stats.leaf_node_splits;
-	assert(this->slot_count > 1);
+	assert(this->slot_count >= 1);
 	assert(page_size > 0);
 	// Buffer the node.
 	std::vector<std::byte> buffer{page_size};
 	std::memcpy(&buffer[0], this, page_size);
 	auto *buffer_node = reinterpret_cast<LeafNode *>(&buffer[0]);
 
-	uint16_t pivot_i = (buffer_node->slot_count + 1) / 2 - 1;
+	// Determine how many keys go left/right.
+	// If the new key goes in the left node, move more entries to the new right
+	// node. Important when having a tree where each leaf holds only one entry.
+	const auto &middle_slot =
+		*(buffer_node->slots_begin() + ((buffer_node->slot_count + 1) / 2) - 1);
+	const auto &middle_key = middle_slot.get_key(this->get_data());
+	bool skew_left = (middle_key < key); // Will key go right?
+	uint16_t num_slots_left = skew_left ? (buffer_node->slot_count + 1) / 2
+										: (buffer_node->slot_count / 2);
 
 	// First half of slots is reinserted into left leaf to compactiy space.
 	// TODO: Make this better.
 	this->slot_count = 0;
 	this->data_start = page_size;
 	const auto *slot_to_copy = buffer_node->slots_begin();
-	while (slot_to_copy < buffer_node->slots_begin() + pivot_i + 1) {
+	while (slot_to_copy < buffer_node->slots_begin() + num_slots_left) {
 		auto success = insert(slot_to_copy->get_key(buffer_node->get_data()),
 							  slot_to_copy->get_value(buffer_node->get_data()));
 		if (!success)
@@ -622,12 +629,15 @@ const KeyT BTree<KeyT, ValueT>::LeafNode::split(LeafNode &new_node,
 
 		++slot_to_copy;
 	}
+	assert(this->slot_count == num_slots_left);
 
-	// Return new pivot to insert into parent node.
-	assert(this->slot_count > 0);
+	// If left node is left empty, the key to be inserted will be the new
+	// pivotal key in the parent.
+	if (this->slot_count == 0)
+		return key;
+
+	// Return last slot of left node as new pivot to insert into parent.
 	const auto &pivot_slot = *(slots_begin() + this->slot_count - 1);
-	assert(this->slot_count == pivot_i + 1);
-
 	return pivot_slot.get_key(this->get_data());
 }
 // -----------------------------------------------------------------
@@ -689,20 +699,14 @@ bool BTree<KeyT, ValueT>::LeafNode::insert(const KeyT &key,
 template <Indexable KeyT, typename ValueT>
 void BTree<KeyT, ValueT>::LeafNode::print() {
 	// Print Header.
-	std::cout << "-----------------------------------------------------"
-			  << std::endl;
-	std::cout << "Header:" << std::endl;
-	std::cout << "	data_start: " << this->data_start << std::endl;
-	std::cout << "	level: " << this->level << std::endl;
-	std::cout << "	slot_count: " << this->slot_count << std::endl;
+	std::cout << ",	data_start: " << this->data_start;
+	std::cout << ",	level: " << this->level;
+	std::cout << ",	slot_count: " << this->slot_count << std::endl;
 
 	// Print Slots.
-	std::cout << "Slots:" << std::endl;
 	for (const auto *slot = slots_begin(); slot < slots_end(); ++slot) {
 		slot->print(this->get_data());
 	}
-	std::cout << "-----------------------------------------------------"
-			  << std::endl;
 }
 // -----------------------------------------------------------------
 template <Indexable KeyT, typename ValueT>
@@ -727,12 +731,12 @@ const ValueT &BTree<KeyT, ValueT>::LeafNode::LeafSlot::get_value(
 template <Indexable KeyT, typename ValueT>
 void BTree<KeyT, ValueT>::LeafNode::LeafSlot::print(
 	const std::byte *begin) const {
-	std::cout << "	offset: " << this->offset;
-	std::cout << ",	key_size: " << this->key_size;
-	std::cout << ",	value_size: " << value_size;
+	std::cout << "  offset: " << this->offset;
+	std::cout << ", key_size: " << this->key_size;
+	std::cout << ", value_size: " << value_size;
 
-	std::cout << ",	key: " << this->get_key(begin);
-	std::cout << ",	value: " << get_value(begin) << std::endl;
+	std::cout << ", key: " << this->get_key(begin);
+	std::cout << ", value: " << get_value(begin) << std::endl;
 }
 // -----------------------------------------------------------------
 // Explicit instantiations

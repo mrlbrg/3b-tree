@@ -1,4 +1,5 @@
 #include "bbbtree/map.h"
+#include "bbbtree/types.h"
 
 #include <cstddef>
 #include <gtest/gtest.h>
@@ -8,8 +9,8 @@ using namespace bbbtree;
 
 namespace {
 
-using Key = uint64_t;
-using Value = uint64_t;
+using Key = UInt64;
+using Value = TID;
 
 class MapTest : public ::testing::Test {
   protected:
@@ -27,7 +28,7 @@ class MapTest : public ::testing::Test {
 		std::unordered_map<Key, Value> expected_map;
 
 		std::mt19937_64 rng(42); // Fixed seed for reproducibility
-		std::uniform_int_distribution<Key> dist;
+		std::uniform_int_distribution<uint64_t> dist;
 
 		// Generate random tuples with unique keys
 		while (expected_map.size() < num_tuples) {
@@ -36,7 +37,7 @@ class MapTest : public ::testing::Test {
 
 			if (expected_map.count(key) == 0) {
 				EXPECT_TRUE(map_->insert(key, value));
-				expected_map[key] = value;
+				expected_map.emplace(key, value);
 				EXPECT_EQ(expected_map.size(), map_->size());
 			} else {
 				EXPECT_FALSE(map_->insert(key, value));
