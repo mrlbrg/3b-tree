@@ -72,5 +72,7 @@ void Database<IndexT, KeyT>::erase(const KeyT & /*key*/) {
 // -----------------------------------------------------------------
 // Explicit instantiations
 template class Database<BTree, UInt64>;
+template class Database<BTree, String>;
 template class Database<Map, UInt64>;
+template class Database<Map, String>;
 } // namespace bbbtree

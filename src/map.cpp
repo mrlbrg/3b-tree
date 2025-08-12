@@ -29,5 +29,6 @@ bool Map<KeyT, ValueT>::insert(const KeyT &key, const ValueT &value) {
 // -----------------------------------------------------------------
 // Explicit instantiations
 template class Map<UInt64, TID>;
+template class Map<String, TID>;
 // -----------------------------------------------------------------
 } // namespace bbbtree

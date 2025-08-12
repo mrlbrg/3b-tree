@@ -760,7 +760,9 @@ void BTree<KeyT, ValueT>::LeafNode::LeafSlot::print(
 // Explicit instantiations
 template struct BTree<UInt64, TID>;
 template struct BTree<UInt64, UInt64>;
+template struct BTree<UInt64, String>;
+template struct BTree<String, TID>;
 template struct BTree<String, UInt64>;
 template struct BTree<String, String>;
-// -----------------------------------------------------------------
+// --------------------------------------------------------------
 } // namespace bbbtree
