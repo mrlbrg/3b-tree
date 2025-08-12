@@ -40,7 +40,7 @@ concept Indexable = requires(T a, T b, const std::byte *data, uint16_t size) {
 /// re-use/compactify the space nor merge nodes. We leave nodes fragmented.
 /// TODO: We cannot use one file per index if we want to have several trees
 /// later.
-template <Indexable KeyT, typename ValueT> struct BTree : public Segment {
+template <Indexable KeyT, Indexable ValueT> struct BTree : public Segment {
 
 	/// Constructor. Not thread-safe.
 	BTree(SegmentID segment_id, BufferManager &buffer_manager);
@@ -227,7 +227,7 @@ template <Indexable KeyT, typename ValueT> struct BTree : public Segment {
 
 			/// Returns a const reference to the value this slot is pointing
 			/// to.
-			const ValueT &get_value(const std::byte *begin) const;
+			const ValueT get_value(const std::byte *begin) const;
 
 			void print(const std::byte *begin) const;
 
@@ -244,7 +244,7 @@ template <Indexable KeyT, typename ValueT> struct BTree : public Segment {
 		/// pair.
 		bool has_space(const KeyT &key, const ValueT &value) const {
 			return get_free_space() >=
-				   (key.size() + sizeof(value) + sizeof(LeafSlot));
+				   (key.size() + value.size() + sizeof(LeafSlot));
 		}
 
 		/// Get the index of the first key that is not less than than a provided

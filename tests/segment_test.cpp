@@ -1,5 +1,6 @@
 #include "bbbtree/buffer_manager.h"
 #include "bbbtree/segment.h"
+#include "bbbtree/types.h"
 
 #include <cstring>
 #include <gtest/gtest.h>
@@ -46,7 +47,7 @@ TEST_F(SegmentTest, Empty) {
 		EXPECT_EQ(fsi->create_new_page(buffer_manager->page_size), (size_t)0);
 		auto page_id = fsi->find(1024);
 		EXPECT_TRUE(page_id.has_value());
-		EXPECT_EQ(page_id.value(), 0);
+		EXPECT_EQ(page_id.value(), (bbbtree::PageID)0);
 		fsi->update(0, 0);
 
 		EXPECT_FALSE(fsi->find(1).has_value());
@@ -54,8 +55,9 @@ TEST_F(SegmentTest, Empty) {
 
 	// Can append to last page only.
 	{
-		EXPECT_EQ(fsi->create_new_page(buffer_manager->page_size), 1);
-		EXPECT_EQ(fsi->find(10).value(), 1);
+		EXPECT_EQ(fsi->create_new_page(buffer_manager->page_size),
+				  (bbbtree::PageID)1);
+		EXPECT_EQ(fsi->find(10).value(), (bbbtree::PageID)1);
 		// Cannot udpate non-last page
 		EXPECT_THROW(fsi->update(0, 0), std::logic_error);
 		// Cannot update to more space

@@ -14,7 +14,6 @@ set(
     include/bbbtree/slotted_page.h
     include/bbbtree/btree.h
     include/bbbtree/map.h
-    include/bbbtree/tuple_id.h 
     include/bbbtree/file.h 
     include/bbbtree/types.h
     include/bbbtree/stats.h

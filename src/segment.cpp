@@ -8,7 +8,7 @@ namespace bbbtree {
 FSISegment::FSISegment(SegmentID segment_id, BufferManager &buffer_manager)
 	: Segment(segment_id, buffer_manager) {}
 
-std::optional<uint64_t> FSISegment::find(uint32_t required_space) {
+std::optional<PageID> FSISegment::find(uint32_t required_space) {
 	auto &frame = buffer_manager.fix_page(segment_id, 0, false);
 	auto &header = *(reinterpret_cast<FSISegment::Header *>(frame.get_data()));
 
@@ -24,7 +24,7 @@ std::optional<uint64_t> FSISegment::find(uint32_t required_space) {
 	return {page_id};
 }
 
-void FSISegment::update(uint64_t target_page, uint32_t new_free_space) {
+void FSISegment::update(PageID target_page, uint32_t new_free_space) {
 	auto &frame = buffer_manager.fix_page(segment_id, 0, true);
 	auto &header = *(reinterpret_cast<FSISegment::Header *>(frame.get_data()));
 

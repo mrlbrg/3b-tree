@@ -15,7 +15,6 @@ set(
     src/btree.cpp
     src/map.cpp
     src/stats.cpp
-    src/tuple_id.cpp
     src/types.cpp
 )
 if(UNIX)

@@ -2,7 +2,6 @@
 
 #include "bbbtree/buffer_manager.h"
 #include "bbbtree/slotted_page.h"
-#include "bbbtree/tuple_id.h"
 
 #include <optional>
 
@@ -36,10 +35,10 @@ class FSISegment : public Segment {
 	/// header of the first page to 0.
 	FSISegment(SegmentID segment_id, BufferManager &buffer_manager);
 	/// Find a free page. Optionally returns the page ID.
-	std::optional<uint64_t> find(uint32_t required_space);
+	std::optional<PageID> find(uint32_t required_space);
 	/// Updates the amount of free space on the target page. Updated by the
 	/// Slotted Pages Segment.
-	void update(uint64_t target_page, uint32_t free_space);
+	void update(PageID target_page, uint32_t free_space);
 	/// Creates a new page in this inventory. Returns the new page's ID.
 	PageID create_new_page(size_t initial_free_space);
 

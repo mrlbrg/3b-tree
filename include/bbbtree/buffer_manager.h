@@ -40,6 +40,8 @@ class BufferFrame {
 
 	/// Returns a pointer to this page's data.
 	char *get_data() const { return data; }
+	/// Set frame as dirty.
+	void set_dirty() { state = State::DIRTY; }
 };
 
 class buffer_full_error : public std::exception {

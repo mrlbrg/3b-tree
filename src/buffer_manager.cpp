@@ -119,7 +119,7 @@ void BufferManager::unfix_page(BufferFrame &frame, bool is_dirty) {
 
 	if (is_dirty)
 		frame.state = State::DIRTY;
-	// TODO: When we have several readers, we do not want to set this so false.
+	// TODO: When we have several readers, we do not want to set this to false.
 	// Somebody else might still be using this.
 	--frame.in_use_by;
 }
@@ -147,7 +147,6 @@ bool BufferManager::evict() {
 		frame->page_id ^ (static_cast<uint64_t>(frame->segment_id) << 48);
 	id_to_frame.erase(segment_page_id);
 
-	// TODO: Must also be written when page is new.
 	// Write dirty pages out.
 	if (frame->state == State::DIRTY)
 		unload(*frame);
