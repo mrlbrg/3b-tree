@@ -33,7 +33,7 @@ static std::vector<std::byte> get_random_bytes(size_t num_bytes) {
 }
 
 /// A B-Tree that can be seeded with randomly generated tuples.
-template <Indexable KeyT, typename ValueT>
+template <KeyIndexable KeyT, ValueIndexable ValueT>
 struct SeedableBTree : public BTree<KeyT, ValueT> {
 
 	static const constexpr size_t SPACE_ON_LEAF =

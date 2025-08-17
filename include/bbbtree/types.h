@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 
 namespace bbbtree {
@@ -23,9 +24,7 @@ struct UInt64 {
 	/// Size of the serialized value.
 	static constexpr uint16_t size() { return sizeof(value); }
 	/// Serialize the value into bytes to store on pages.
-	const std::byte *serialize() const {
-		return reinterpret_cast<const std::byte *>(&value);
-	}
+	void serialize(std::byte *dst) const { std::memcpy(dst, &value, size()); }
 	/// Deserializes the bytes into the type.
 	static UInt64 deserialize(const std::byte *data, uint16_t num_bytes) {
 		assert(num_bytes == size());
@@ -45,6 +44,8 @@ struct UInt64 {
 // -----------------------------------------------------------------
 /// A TID consists of page ID (48 bit) | slot ID (16 bit).
 struct TID {
+	/// Default Constructor.
+	TID() = default;
 	/// Constructor from raw tuple ID.
 	TID(uint64_t tuple_id) : value(tuple_id) {}
 	/// Constructor from page and slot ID.
@@ -59,9 +60,7 @@ struct TID {
 	/// Size of the serialized value.
 	static constexpr uint16_t size() { return sizeof(value); }
 	/// Serialize the value into bytes to store on pages.
-	const std::byte *serialize() const {
-		return reinterpret_cast<const std::byte *>(&value);
-	}
+	void serialize(std::byte *dst) const { std::memcpy(dst, &value, size()); }
 	/// Deserializes the bytes into the type.
 	static TID deserialize(const std::byte *data, uint16_t num_bytes) {
 		assert(num_bytes == size());
@@ -91,8 +90,8 @@ struct String {
 	/// Size of the wrapped value.
 	uint16_t size() const { return view.size(); }
 	/// Serializes this type into bytes to store on pages.
-	const std::byte *serialize() const {
-		return reinterpret_cast<const std::byte *>(view.data());
+	void serialize(std::byte *dst) const {
+		std::memcpy(dst, view.data(), size());
 	}
 	/// Deserializes the bytes into the type.
 	static String deserialize(const std::byte *data, uint16_t num_bytes) {

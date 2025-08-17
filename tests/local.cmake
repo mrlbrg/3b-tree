@@ -12,6 +12,8 @@ set(TEST_CC
     tests/buffer_manager_test.cpp
     tests/slotted_page_test.cpp
     tests/btree_test.cpp
+    tests/bbbtree_test.cpp
+    tests/delta_test.cpp
     tests/map_test.cpp
 )
 

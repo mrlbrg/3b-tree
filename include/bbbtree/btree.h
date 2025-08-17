@@ -17,15 +17,41 @@
 // runtime though.
 
 namespace bbbtree {
+/// Requirements for the keys and values of the index.
+template <typename T>
+concept Serializable =
+	requires(T a, std::byte *dest, const std::byte *src, uint16_t n) {
+		/// Returns the number of bytes of the serialized object.
+		{ a.size() } -> std::same_as<uint16_t>;
+		/// Serializes the object into the target position with `size()` bytes.
+		{ a.serialize(dest) };
+		/// Deserializes the object from the given data and size.
+		/// The returned object can contain pointers into the src pointer (e.g.
+		/// for string views)! Therefore do not use this object after releasing
+		/// memory pointer to by `src`.
+		{ T::deserialize(src, n) } -> std::same_as<T>;
+	};
+/// Keys and value need to be equality comparable for testing.
+template <typename T>
+concept Testable = requires(T a, T b) {
+	{ a == b } -> std::convertible_to<bool>;
+};
+/// Requirements to search for keys in the B-Tree.
+template <typename T>
+concept LowerBoundable = requires(T a, T b) {
+	{ a <= b } -> std::convertible_to<bool>;
+};
+/// Requires printing to std::cout.
+template <typename T>
+concept Printable = requires(T a) {
+	{ std::cout << a } -> std::same_as<std::ostream &>;
+};
+/// Requirements for the values of the index.
+template <typename T>
+concept ValueIndexable = Serializable<T> && Testable<T> && Printable<T>;
 /// Requirements for the keys of the index.
 template <typename T>
-concept Indexable = requires(T a, T b, const std::byte *data, uint16_t size) {
-	{ a <= b } -> std::convertible_to<bool>;
-	{ a == b } -> std::convertible_to<bool>;
-	{ a.size() } -> std::same_as<uint16_t>;
-	{ a.serialize() } -> std::same_as<const std::byte *>;
-	{ T::deserialize(data, size) } -> std::same_as<T>;
-};
+concept KeyIndexable = ValueIndexable<T> && LowerBoundable<T>;
 
 /// External Storage index that maps from unique, possibly variable-length keys
 /// to TID identifying the tuple's location on the slotted pages. Due to
@@ -40,7 +66,8 @@ concept Indexable = requires(T a, T b, const std::byte *data, uint16_t size) {
 /// re-use/compactify the space nor merge nodes. We leave nodes fragmented.
 /// TODO: We cannot use one file per index if we want to have several trees
 /// later.
-template <Indexable KeyT, Indexable ValueT> struct BTree : public Segment {
+template <KeyIndexable KeyT, ValueIndexable ValueT>
+struct BTree : public Segment {
 
 	/// Constructor. Not thread-safe.
 	BTree(SegmentID segment_id, BufferManager &buffer_manager);

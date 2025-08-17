@@ -13,6 +13,8 @@ set(
     src/segment.cpp
     src/slotted_page.cpp
     src/btree.cpp
+    src/bbbtree.cpp
+    src/delta.cpp
     src/map.cpp
     src/stats.cpp
     src/types.cpp
