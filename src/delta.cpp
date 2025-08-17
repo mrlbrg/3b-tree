@@ -1,5 +1,6 @@
 #include "bbbtree/delta.h"
 #include <cstring>
+#include <vector>
 
 namespace bbbtree {
 // -----------------------------------------------------------------
@@ -34,8 +35,7 @@ void Delta<KeyT, ValueT>::serialize(std::byte *dst) const {
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
-Delta<KeyT, ValueT> Delta<KeyT, ValueT>::deserialize(const std::byte *src,
-													 uint16_t n) {
+Delta<KeyT, ValueT> Delta<KeyT, ValueT>::deserialize(const std::byte *src) {
 	Delta delta;
 
 	// Deserialize the operation type.
@@ -56,8 +56,6 @@ Delta<KeyT, ValueT> Delta<KeyT, ValueT>::deserialize(const std::byte *src,
 	src += key_size;
 	// Deserialize the value.
 	delta.entry.value = ValueT::deserialize(src, value_size);
-
-	assert(n == delta.size());
 
 	return delta;
 }
@@ -101,23 +99,22 @@ void Deltas<KeyT, ValueT>::serialize(std::byte *dst) const {
 template <KeyIndexable KeyT, ValueIndexable ValueT>
 Deltas<KeyT, ValueT> Deltas<KeyT, ValueT>::deserialize(const std::byte *src,
 													   uint16_t n) {
-	Deltas<KeyT, ValueT> deltas;
 	assert(n >= sizeof(uint16_t));
+	std::vector<Delta<KeyT, ValueT>> deltas;
 	// Deserialize the number of deltas.
 	uint16_t num_deltas;
 	std::memcpy(&num_deltas, src, sizeof(num_deltas));
-	deltas.deltas.reserve(num_deltas);
-	deltas.cached_size = sizeof(num_deltas);
+	deltas.reserve(num_deltas);
+	uint16_t cached_size = sizeof(num_deltas);
 	// Deserialize the deltas.
 	for (uint16_t i = 0; i < num_deltas; i++) {
-		auto delta =
-			Delta<KeyT, ValueT>::deserialize(src + deltas.cached_size, n);
+		auto delta = Delta<KeyT, ValueT>::deserialize(src + cached_size);
 		auto delta_size = delta.size();
-		deltas.cached_size += delta_size;
-		deltas.deltas.push_back(std::move(delta));
+		cached_size += delta_size;
+		deltas.push_back(std::move(delta));
 	}
 
-	return deltas;
+	return {std::move(deltas), cached_size};
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>

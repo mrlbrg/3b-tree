@@ -22,21 +22,33 @@ TEST_F(DeltaTest, DeltaSerialization) {
 		IntDelta delta{OperationType::Insert, 42, 1001};
 		std::vector<std::byte> buffer(delta.size());
 		delta.serialize(buffer.data());
-		auto deserialized = IntDelta::deserialize(buffer.data(), buffer.size());
+		auto deserialized = IntDelta::deserialize(buffer.data());
 		EXPECT_EQ(delta, deserialized);
+		EXPECT_EQ(delta.size(), deserialized.size());
 	}
 
 	{
 		StringDelta delta{OperationType::Insert, {"Hello"}, 1001};
 		std::vector<std::byte> buffer(delta.size());
 		delta.serialize(buffer.data());
-		auto deserialized =
-			StringDelta::deserialize(buffer.data(), buffer.size());
+		auto deserialized = StringDelta::deserialize(buffer.data());
 		EXPECT_EQ(delta, deserialized);
+		EXPECT_EQ(delta.size(), deserialized.size());
 	}
 }
 /// Deltas are serialized and deserialized correctly.
-TEST_F(DeltaTest, DeltasSerialization) {}
+TEST_F(DeltaTest, DeltasSerialization) {
+	IntDeltas deltas{{{OperationType::Insert, 42, 1001},
+					  {OperationType::Update, 43, 1002},
+					  {OperationType::Delete, 44, 1003}}};
+
+	std::vector<std::byte> buffer(deltas.size());
+	deltas.serialize(buffer.data());
+	auto deserialized = IntDeltas::deserialize(buffer.data(), buffer.size());
+
+	EXPECT_EQ(deltas.size(), deserialized.size());
+	EXPECT_EQ(deltas, deserialized);
+}
 /// Deltas can be stored in a BTree.
 TEST_F(DeltaTest, DeltaTree) {}
 /// Deltas cannot exceed BTree nodes.

@@ -56,7 +56,7 @@ template <KeyIndexable KeyT, ValueIndexable ValueT> struct Delta {
 	void serialize(std::byte *dst) const;
 	/// Deserializes the bytes on a page into the type.
 	/// @max_bytes: the maximum number of bytes to read from the source.
-	static Delta deserialize(const std::byte *src, uint16_t max_bytes);
+	static Delta deserialize(const std::byte *src);
 
 	/// Spaceship operator.
 	auto operator<=>(const Delta &) const = default;
@@ -67,6 +67,18 @@ template <KeyIndexable KeyT, ValueIndexable ValueT> struct Delta {
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT> struct Deltas {
   public:
+	/// Constructor.
+	Deltas(std::vector<Delta<KeyT, ValueT>> deltas)
+		: deltas(std::move(deltas)) {
+		cached_size = sizeof(uint16_t); // Number of deltas.
+		// Calculate the size of the deltas.
+		for (const auto &delta : this->deltas)
+			cached_size += delta.size();
+	}
+	/// Constuctor with known size.
+	Deltas(std::vector<Delta<KeyT, ValueT>> deltas, uint16_t size)
+		: deltas(std::move(deltas)), cached_size(size) {}
+
 	/// Size of the serialized values.
 	uint16_t size() const { return cached_size; }
 	/// Serializes this type into bytes to store on pages.
@@ -82,7 +94,7 @@ template <KeyIndexable KeyT, ValueIndexable ValueT> struct Deltas {
 
   private:
 	/// The deltas that were applied to the page.
-	std::vector<Delta<KeyT, ValueT>> deltas{};
+	const std::vector<Delta<KeyT, ValueT>> deltas;
 	/// The number of bytes needed to serialize the deltas.
 	uint16_t cached_size = 0;
 };
