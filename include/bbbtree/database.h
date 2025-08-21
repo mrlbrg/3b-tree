@@ -10,6 +10,9 @@
 
 // TODO: Rethink `logic_errors` and which error makes more sense to throw.
 // TODO: Maybe store tuples directly in B-Tree and do not redirect via TID.
+// TODO: Create a metadata page that stores all state for all segments. That
+// way, not each BTree has to store its state on its own page, wasting space in
+// the buffer.
 
 namespace bbbtree {
 // We use only a single type of value for this database.
@@ -21,10 +24,12 @@ static const constexpr size_t NUM_PAGES = 10;
 static const constexpr SegmentID FSI_SEGMENT_ID = 0;
 static const constexpr SegmentID SP_SEGMENT_ID = 1;
 static const constexpr SegmentID INDEX_SEGMENT_ID = 2;
+static const constexpr SegmentID DELTA_SEGMENT_ID = 3;
 
 /// A concept that requires some member functions from an index mapping a key to
 /// TIDs.
-template <template <typename, typename> class IndexT, typename KeyT>
+template <template <typename, typename, bool = false> class IndexT,
+		  typename KeyT>
 concept IndexInterface =
 	requires(IndexT<KeyT, TID> index, const KeyT &key, const TID &value) {
 		{ index.lookup(key) } -> std::same_as<std::optional<TID>>;
@@ -35,7 +40,8 @@ concept IndexInterface =
 /// A Database maintains a single table of keys and values. The schema is
 /// fixated at compile-time. It is templated on its index, which maps `KeyT` to
 /// TIDs. The value type is always the same.
-template <template <typename, typename> typename IndexT, typename KeyT>
+template <template <typename, typename, bool = false> typename IndexT,
+		  typename KeyT>
 	requires IndexInterface<IndexT, KeyT>
 class Database {
   public:

@@ -36,22 +36,29 @@ BufferManager::BufferManager(size_t page_size, size_t page_count, bool clear)
 // -----------------------------------------------------------------
 BufferManager::~BufferManager() {
 	for (auto &frame : page_frames) {
-		// Make sure all pages were unfixed again.
-		assert(frame.in_use_by == 0);
-		// TODO: Must also be written when page is new.
-		if (frame.state == State::DIRTY)
-			unload(frame);
+		// No callbacks at destruction time. Page Logic must not be accessed,
+		// since its already destroyed. Just force out all pages at
+		// destruction-time.
+		frame.page_logic = nullptr;
+		remove(frame);
 	}
 }
 // ----------------------------------------------------------------
 void BufferManager::reset(BufferFrame &frame) {
 	assert(!frame.in_use_by);
 	frame.state = State::UNDEFINED;
+	frame.page_logic = nullptr;
 }
 // ----------------------------------------------------------------
 void BufferManager::unload(BufferFrame &frame) {
 	// Sanity Check: Caller must ensure that page needs to be unloaded.
-	assert(frame.state == State::DIRTY);
+	assert(frame.state == State::DIRTY || frame.state == State::NEW);
+
+	auto continue_unload =
+		frame.page_logic ? frame.page_logic->before_unload(frame) : true;
+
+	if (!continue_unload)
+		return; // Unload is cancelled.
 
 	size_t page_begin = frame.page_id * page_size;
 	size_t page_end = page_begin + page_size;
@@ -79,17 +86,22 @@ void BufferManager::load(BufferFrame &frame, SegmentID segment_id,
 	// Page is new. Resize file on write out.
 	auto &file = get_segment(segment_id);
 	if (file.size() < page_end) {
-		// Set the page to dirty to make sure its written to disk later.
-		frame.state = State::DIRTY;
+		// Set the page to new to make sure its written to disk later.
+		frame.state = State::NEW;
 		return;
 	}
 
 	// TODO: Throw an error when not enough was read/written.
 	file.read_block(page_begin, page_size, frame.data);
+
+	if (frame.page_logic)
+		// Call the page logic after loading.
+		frame.page_logic->after_load(frame);
 }
 // -----------------------------------------------------------------
 BufferFrame &BufferManager::fix_page(SegmentID segment_id, PageID page_id,
-									 bool /*exclusive*/) {
+									 bool /*exclusive*/,
+									 PageLogic *page_logic) {
 	// Sanity Check
 	assert((page_id & 0xFFFF000000000000ULL) == 0);
 
@@ -107,8 +119,9 @@ BufferFrame &BufferManager::fix_page(SegmentID segment_id, PageID page_id,
 	auto &frame = get_free_frame();
 	assert(frame.in_use_by == 0);
 	id_to_frame[segment_page_id] = &frame;
-	load(frame, segment_id, page_id);
 	frame.in_use_by = 1;
+	frame.page_logic = page_logic;
+	load(frame, segment_id, page_id);
 
 	return frame;
 }
@@ -117,11 +130,26 @@ void BufferManager::unfix_page(BufferFrame &frame, bool is_dirty) {
 	// TODO: Check if is_dirty, lock must have been exclusive.
 	assert(frame.in_use_by > 0);
 
-	if (is_dirty)
-		frame.state = State::DIRTY;
-	// TODO: When we have several readers, we do not want to set this to false.
-	// Somebody else might still be using this.
+	if (is_dirty) // Do not overwrite NEW state.
+		frame.set_dirty();
+
 	--frame.in_use_by;
+}
+// ----------------------------------------------------------------
+void BufferManager::remove(BufferFrame &frame) {
+	// Sanity Check: Must not be in use.
+	assert(frame.in_use_by == 0);
+	auto segment_page_id =
+		frame.page_id ^ (static_cast<uint64_t>(frame.segment_id) << 48);
+	// Write dirty pages out.
+	if (frame.state == State::DIRTY || frame.state == State::NEW)
+		unload(frame);
+	// Remove from directory.
+	id_to_frame.erase(segment_page_id);
+	// Release frame.
+	reset(frame);
+	free_buffer_frames.push_back(&frame);
+	++stats.pages_evicted;
 }
 // ----------------------------------------------------------------
 bool BufferManager::evict() {
@@ -142,21 +170,7 @@ bool BufferManager::evict() {
 		frame = &(page_frames[i]);
 	}
 
-	// Remove frame from directory
-	auto segment_page_id =
-		frame->page_id ^ (static_cast<uint64_t>(frame->segment_id) << 48);
-	id_to_frame.erase(segment_page_id);
-
-	// Write dirty pages out.
-	if (frame->state == State::DIRTY)
-		unload(*frame);
-
-	// Free the frame from ownership.
-	assert(!frame->in_use_by);
-	frame->state = State::UNDEFINED;
-	free_buffer_frames.emplace_back(frame);
-
-	++stats.pages_swapped;
+	remove(*frame);
 
 	return true;
 }
@@ -197,6 +211,19 @@ File &BufferManager::get_segment(SegmentID segment_id) {
 		new_it->second->resize(0);
 
 	return *(new_it->second);
+}
+// ------------------------------------------------------------------
+void BufferManager::clear_all() {
+restart:
+	free_buffer_frames.clear();
+	for (auto &frame : page_frames)
+		remove(frame);
+	// During `unload` of BTree nodes, some pages might have been loaded
+	// into the buffer to store the deltas. Therefore we might have to go
+	// another round to also clear all delta tree pages from the buffer.
+	if (free_buffer_frames.size() != page_frames.size())
+		goto restart;
+	assert(id_to_frame.empty());
 }
 // ------------------------------------------------------------------
 } // namespace bbbtree

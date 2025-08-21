@@ -238,9 +238,9 @@ TEST_F(BTreeTest, InnerNodeSplits) {
 }
 /// A tree can handle spilling nodes to disk.
 TEST_F(BTreeTest, Spilling) {
-	auto page_swaps_before = stats.pages_swapped;
+	auto page_swaps_before = stats.pages_evicted;
 	btree_str_->seed(BUFFER_SIZE);
-	auto page_swaps_after = stats.pages_swapped;
+	auto page_swaps_after = stats.pages_evicted;
 
 	EXPECT_TRUE(page_swaps_before < page_swaps_after);
 	EXPECT_TRUE(btree_str_->validate());

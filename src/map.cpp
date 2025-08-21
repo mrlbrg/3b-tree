@@ -5,8 +5,8 @@
 
 namespace bbbtree {
 // -----------------------------------------------------------------
-template <typename KeyT, typename ValueT>
-std::optional<ValueT> Map<KeyT, ValueT>::lookup(const KeyT &key) {
+template <typename KeyT, typename ValueT, bool UseDeltaTree>
+std::optional<ValueT> Map<KeyT, ValueT, UseDeltaTree>::lookup(const KeyT &key) {
 	auto it = map.find(key);
 	if (it == map.end())
 		return {};
@@ -14,13 +14,14 @@ std::optional<ValueT> Map<KeyT, ValueT>::lookup(const KeyT &key) {
 	return {it->second};
 }
 // -----------------------------------------------------------------
-template <typename KeyT, typename ValueT>
-void Map<KeyT, ValueT>::erase(const KeyT &key) {
+template <typename KeyT, typename ValueT, bool UseDeltaTree>
+void Map<KeyT, ValueT, UseDeltaTree>::erase(const KeyT &key) {
 	map.erase(key);
 }
 // -----------------------------------------------------------------
-template <typename KeyT, typename ValueT>
-bool Map<KeyT, ValueT>::insert(const KeyT &key, const ValueT &value) {
+template <typename KeyT, typename ValueT, bool UseDeltaTree>
+bool Map<KeyT, ValueT, UseDeltaTree>::insert(const KeyT &key,
+											 const ValueT &value) {
 
 	auto [it, success] = map.try_emplace(key, value);
 

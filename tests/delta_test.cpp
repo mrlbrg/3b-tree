@@ -29,21 +29,23 @@ class DeltaTest : public ::testing::Test {
 TEST_F(DeltaTest, DeltaSerialization) {
 
 	{
-		IntDelta delta{OperationType::Insert, 42, 1001};
-		std::vector<std::byte> buffer(delta.size());
-		delta.serialize(buffer.data());
-		auto deserialized = IntDelta::deserialize(buffer.data());
-		EXPECT_EQ(delta, deserialized);
-		EXPECT_EQ(delta.size(), deserialized.size());
+		IntDelta expected_delta{OperationType::Insert, 42, 1001};
+		std::vector<std::byte> buffer(expected_delta.size());
+		expected_delta.serialize(buffer.data());
+		IntDelta deserialized{};
+		deserialized.deserialize(buffer.data());
+		EXPECT_EQ(expected_delta, deserialized);
+		EXPECT_EQ(expected_delta.size(), deserialized.size());
 	}
 
 	{
-		StringDelta delta{OperationType::Insert, {"Hello"}, 1001};
-		std::vector<std::byte> buffer(delta.size());
-		delta.serialize(buffer.data());
-		auto deserialized = StringDelta::deserialize(buffer.data());
-		EXPECT_EQ(delta, deserialized);
-		EXPECT_EQ(delta.size(), deserialized.size());
+		StringDelta expected_delta{OperationType::Insert, {"Hello"}, 1001};
+		std::vector<std::byte> buffer(expected_delta.size());
+		expected_delta.serialize(buffer.data());
+		StringDelta deserialized{};
+		deserialized.deserialize(buffer.data());
+		EXPECT_EQ(expected_delta, deserialized);
+		EXPECT_EQ(expected_delta.size(), deserialized.size());
 	}
 }
 /// Deltas are serialized and deserialized correctly.
@@ -62,9 +64,10 @@ TEST_F(DeltaTest, DeltasSerialization) {
 	}
 	// Int deltas.
 	{
-		IntDeltas deltas{{{OperationType::Insert, 42, 1001},
-						  {OperationType::Update, 43, 1002},
-						  {OperationType::Delete, 44, 1003}}};
+		std::vector<IntDelta> values = {{OperationType::Insert, 42, 1001},
+										{OperationType::Update, 43, 1002},
+										{OperationType::Delete, 44, 1003}};
+		IntDeltas deltas{std::move(values)};
 
 		std::vector<std::byte> buffer(deltas.size());
 		deltas.serialize(buffer.data());
@@ -76,9 +79,11 @@ TEST_F(DeltaTest, DeltasSerialization) {
 	}
 	// String deltas.
 	{
-		StringDeltas deltas{{{OperationType::Insert, {"Hello"}, 1001},
-							 {OperationType::Update, {"World"}, 1002},
-							 {OperationType::Delete, {"!"}, 1003}}};
+		std::vector<StringDelta> values = {
+			{OperationType::Insert, {"Hello"}, 1001},
+			{OperationType::Update, {"World"}, 1002},
+			{OperationType::Delete, {"!"}, 1003}};
+		StringDeltas deltas{std::move(values)};
 
 		std::vector<std::byte> buffer(deltas.size());
 		deltas.serialize(buffer.data());
@@ -93,12 +98,16 @@ TEST_F(DeltaTest, DeltasSerialization) {
 TEST_F(DeltaTest, DeltaTree) {
 	IntDeltaTree delta_tree{342, *buffer_manager_};
 
-	auto expected_deltas1 = IntDeltas{
-		{{OperationType::Insert, 42, 1001}, {OperationType::Update, 45, 1004}}};
-	auto expected_deltas2 = IntDeltas{{}};
-	auto expected_deltas3 = IntDeltas{{{OperationType::Delete, 44, 1003},
-									   {OperationType::Update, 43, 1002},
-									   {OperationType::Insert, 46, 1003}}};
+	std::vector<IntDelta> values1 = {{OperationType::Insert, 42, 1001},
+									 {OperationType::Update, 45, 1004}};
+	std::vector<IntDelta> values2 = {};
+	std::vector<IntDelta> values3 = {{OperationType::Delete, 44, 1003},
+									 {OperationType::Update, 43, 1002},
+									 {OperationType::Insert, 46, 1003}};
+
+	IntDeltas expected_deltas1{std::move(values1)};
+	IntDeltas expected_deltas2{std::move(values2)};
+	IntDeltas expected_deltas3{std::move(values3)};
 
 	// Insert some deltas.
 	EXPECT_TRUE(delta_tree.insert(1, expected_deltas1));

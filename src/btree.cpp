@@ -16,13 +16,16 @@
 
 namespace bbbtree {
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-BTree<KeyT, ValueT>::BTree(SegmentID segment_id, BufferManager &buffer_manager)
-	: Segment(segment_id, buffer_manager) {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+BTree<KeyT, ValueT, UseDeltaTree>::BTree(SegmentID segment_id,
+										 BufferManager &buffer_manager,
+										 PageLogic *page_logic)
+	: Segment(segment_id, buffer_manager), page_logic(page_logic) {
 	// TODO: Create some meta-data segment that stores information like the
 	// root's page id on file.
 	auto &frame = buffer_manager.fix_page(segment_id, 0, false);
-	auto &state = *(reinterpret_cast<BTree<KeyT, ValueT> *>(frame.get_data()));
+	auto &state = *(reinterpret_cast<BTree<KeyT, ValueT, UseDeltaTree> *>(
+		frame.get_data()));
 
 	// Load meta-data into memory.
 	root = state.root;
@@ -33,7 +36,8 @@ BTree<KeyT, ValueT>::BTree(SegmentID segment_id, BufferManager &buffer_manager)
 		root = 1;
 		next_free_page = 2;
 		// Intialize root node.
-		auto &root_page = buffer_manager.fix_page(segment_id, root, true);
+		auto &root_page =
+			buffer_manager.fix_page(segment_id, root, true, page_logic);
 		new (root_page.get_data()) LeafNode(buffer_manager.page_size);
 		buffer_manager.unfix_page(root_page, true);
 	}
@@ -41,20 +45,22 @@ BTree<KeyT, ValueT>::BTree(SegmentID segment_id, BufferManager &buffer_manager)
 	buffer_manager.unfix_page(frame, false);
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-BTree<KeyT, ValueT>::~BTree() {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+BTree<KeyT, ValueT, UseDeltaTree>::~BTree() {
 	// Write out all meta-data needed to pick up index again later.
 	// Caller must make sure that Buffer Manager is destroyed after this,
-	// not before.
+	// not before. Otherwise this state is lost.
 	auto &frame = buffer_manager.fix_page(segment_id, 0, true);
-	auto &state = *(reinterpret_cast<BTree<KeyT, ValueT> *>(frame.get_data()));
+	auto &state = *(reinterpret_cast<BTree<KeyT, ValueT, UseDeltaTree> *>(
+		frame.get_data()));
 	state.root = root;
 	state.next_free_page = next_free_page;
 	buffer_manager.unfix_page(frame, true);
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-std::optional<ValueT> BTree<KeyT, ValueT>::lookup(const KeyT &key) {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+std::optional<ValueT>
+BTree<KeyT, ValueT, UseDeltaTree>::lookup(const KeyT &key) {
 	auto &leaf_frame = get_leaf(key, false);
 	auto &leaf = *reinterpret_cast<LeafNode *>(leaf_frame.get_data());
 
@@ -66,18 +72,20 @@ std::optional<ValueT> BTree<KeyT, ValueT>::lookup(const KeyT &key) {
 	return result;
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-void BTree<KeyT, ValueT>::erase(const KeyT & /*key*/) {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+void BTree<KeyT, ValueT, UseDeltaTree>::erase(const KeyT & /*key*/) {
 	throw std::logic_error("BTree::erase(): Not implemented yet.");
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-BufferFrame &BTree<KeyT, ValueT>::get_leaf(const KeyT &key, bool exclusive) {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+BufferFrame &BTree<KeyT, ValueT, UseDeltaTree>::get_leaf(const KeyT &key,
+														 bool exclusive) {
 	// TODO: When multithreading, we only want the leaf to be locked
-	// exclusively. Must not lock all exclusively on the path here. Start with
-	// inexclusively reading root. Check if it's a leaf. If so, restart but take
-	// exclusive lock and return.
-	auto *frame = &buffer_manager.fix_page(segment_id, root, exclusive);
+	// exclusively. Must not lock all exclusively on the path here. Start
+	// with inexclusively reading root. Check if it's a leaf. If so, restart
+	// but take exclusive lock and return.
+	auto *frame =
+		&buffer_manager.fix_page(segment_id, root, exclusive, page_logic);
 	auto *node = reinterpret_cast<InnerNode *>(frame->get_data());
 
 	while (!node->is_leaf()) {
@@ -97,8 +105,9 @@ BufferFrame &BTree<KeyT, ValueT>::get_leaf(const KeyT &key, bool exclusive) {
 	return *frame;
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-bool BTree<KeyT, ValueT>::insert(const KeyT &key, const ValueT &value) {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+bool BTree<KeyT, ValueT, UseDeltaTree>::insert(const KeyT &key,
+											   const ValueT &value) {
 	// Sanity check
 	{
 		size_t page_size = buffer_manager.page_size;
@@ -135,8 +144,8 @@ restart:
 	return true;
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-PageID BTree<KeyT, ValueT>::get_new_page() {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+PageID BTree<KeyT, ValueT, UseDeltaTree>::get_new_page() {
 	// TODO: Synchronize this when multi-threading.
 	auto page_id = next_free_page;
 	++next_free_page;
@@ -145,16 +154,17 @@ PageID BTree<KeyT, ValueT>::get_new_page() {
 }
 
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-void BTree<KeyT, ValueT>::split(const KeyT &key, const ValueT &value) {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
+											  const ValueT &value) {
 	using Pivot = std::pair<const KeyT, const PageID>;
 
 	// No frames are to be held at this point.
 	while (true) {
 		auto *curr_frame = &buffer_manager.fix_page(segment_id, root, true);
 		auto *curr_node = reinterpret_cast<InnerNode *>(curr_frame->get_data());
-		// All nodes that lie on the path to the key with the leaf at front and
-		// root in back.
+		// All nodes that lie on the path to the key with the leaf at front
+		// and root in back.
 		std::deque<BufferFrame *> path{curr_frame};
 		// All nodes we touch are locked. Must be released in the end.
 		std::vector<BufferFrame *> locked_nodes{curr_frame};
@@ -260,11 +270,12 @@ void BTree<KeyT, ValueT>::split(const KeyT &key, const ValueT &value) {
 	}
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-void BTree<KeyT, ValueT>::print() {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+void BTree<KeyT, ValueT, UseDeltaTree>::print() {
 	// Acquire root to get height of tree.
 	auto &root_frame = buffer_manager.fix_page(segment_id, root, false);
-	auto *node = reinterpret_cast<typename BTree<KeyT, ValueT>::InnerNode *>(
+	auto *node = reinterpret_cast<
+		typename BTree<KeyT, ValueT, UseDeltaTree>::InnerNode *>(
 		root_frame.get_data());
 	auto level = node->level;
 	buffer_manager.unfix_page(root_frame, false);
@@ -285,9 +296,9 @@ void BTree<KeyT, ValueT>::print() {
 		for (auto pid : nodes_on_current_level) {
 			// Acquire page.
 			auto &frame = buffer_manager.fix_page(segment_id, pid, false);
-			auto *node =
-				reinterpret_cast<typename BTree<KeyT, ValueT>::InnerNode *>(
-					frame.get_data());
+			auto *node = reinterpret_cast<
+				typename BTree<KeyT, ValueT, UseDeltaTree>::InnerNode *>(
+				frame.get_data());
 
 			// Sanity Check.
 			assert(node->level == level);
@@ -314,7 +325,8 @@ void BTree<KeyT, ValueT>::print() {
 			  << std::endl;
 	for (auto pid : nodes_on_current_level) {
 		auto &frame = buffer_manager.fix_page(segment_id, pid, false);
-		auto *leaf = reinterpret_cast<typename BTree<KeyT, ValueT>::LeafNode *>(
+		auto *leaf = reinterpret_cast<
+			typename BTree<KeyT, ValueT, UseDeltaTree>::LeafNode *>(
 			frame.get_data());
 		// Sanity Check.
 		assert(leaf->level == level);
@@ -330,11 +342,12 @@ void BTree<KeyT, ValueT>::print() {
 			  << std::endl;
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-size_t BTree<KeyT, ValueT>::size() {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+size_t BTree<KeyT, ValueT, UseDeltaTree>::size() {
 	// Acquire root to get height of tree.
 	auto &root_frame = buffer_manager.fix_page(segment_id, root, false);
-	auto *node = reinterpret_cast<typename BTree<KeyT, ValueT>::InnerNode *>(
+	auto *node = reinterpret_cast<
+		typename BTree<KeyT, ValueT, UseDeltaTree>::InnerNode *>(
 		root_frame.get_data());
 	auto level = node->level;
 	buffer_manager.unfix_page(root_frame, false);
@@ -347,9 +360,9 @@ size_t BTree<KeyT, ValueT>::size() {
 		for (auto pid : nodes_on_current_level) {
 			// Acquire page.
 			auto &frame = buffer_manager.fix_page(segment_id, pid, false);
-			auto *node =
-				reinterpret_cast<typename BTree<KeyT, ValueT>::InnerNode *>(
-					frame.get_data());
+			auto *node = reinterpret_cast<
+				typename BTree<KeyT, ValueT, UseDeltaTree>::InnerNode *>(
+				frame.get_data());
 
 			// Sanity Check.
 			assert(node->level == level);
@@ -372,9 +385,9 @@ size_t BTree<KeyT, ValueT>::size() {
 	size_t result = 0;
 	for (auto pid : nodes_on_current_level) {
 		auto &frame = buffer_manager.fix_page(segment_id, pid, false);
-		auto &leaf =
-			*reinterpret_cast<typename BTree<KeyT, ValueT>::LeafNode *>(
-				frame.get_data());
+		auto &leaf = *reinterpret_cast<
+			typename BTree<KeyT, ValueT, UseDeltaTree>::LeafNode *>(
+			frame.get_data());
 		// Sanity Check.
 		assert(leaf.level == level);
 
@@ -385,8 +398,8 @@ size_t BTree<KeyT, ValueT>::size() {
 	return result;
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-size_t BTree<KeyT, ValueT>::height() {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+size_t BTree<KeyT, ValueT, UseDeltaTree>::height() {
 	auto &frame = buffer_manager.fix_page(segment_id, root, false);
 	auto &root_node = *reinterpret_cast<InnerNode *>(frame.get_data());
 	size_t height = root_node.level + 1;
@@ -394,25 +407,26 @@ size_t BTree<KeyT, ValueT>::height() {
 	return height;
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-const KeyT
-BTree<KeyT, ValueT>::Node::Slot::get_key(const std::byte *begin) const {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+const KeyT BTree<KeyT, ValueT, UseDeltaTree>::Node::Slot::get_key(
+	const std::byte *begin) const {
 	assert(key_size);
 	assert(offset);
 	return KeyT::deserialize(begin + offset, key_size);
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-BTree<KeyT, ValueT>::InnerNode::InnerNode(uint32_t page_size, uint16_t level,
-										  PageID upper)
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::InnerNode(uint32_t page_size,
+														uint16_t level,
+														PageID upper)
 	: Node(page_size, level), upper(upper) {
 	// Sanity Check: Node must fit page.
 	assert(page_size > sizeof(InnerNode));
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-BTree<KeyT, ValueT>::InnerNode::Pivot *
-BTree<KeyT, ValueT>::InnerNode::lower_bound(const KeyT &pivot) {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::Pivot *
+BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::lower_bound(const KeyT &pivot) {
 	// Compare keys from two slots
 	auto comp = [&](const Pivot &slot, const KeyT &key) -> bool {
 		const auto slot_key = slot.get_key(this->get_data());
@@ -423,8 +437,8 @@ BTree<KeyT, ValueT>::InnerNode::lower_bound(const KeyT &pivot) {
 	return std::lower_bound(slots_begin(), slots_end(), pivot, comp);
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-PageID BTree<KeyT, ValueT>::InnerNode::lookup(const KeyT &pivot) {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+PageID BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::lookup(const KeyT &pivot) {
 	assert(upper);
 	auto *slot = lower_bound(pivot);
 
@@ -436,9 +450,10 @@ PageID BTree<KeyT, ValueT>::InnerNode::lookup(const KeyT &pivot) {
 	return slot->child;
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-const KeyT BTree<KeyT, ValueT>::InnerNode::split(InnerNode &new_node,
-												 size_t page_size) {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+const KeyT
+BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::split(InnerNode &new_node,
+													size_t page_size) {
 	++stats.inner_node_splits;
 	// Sanity Check.
 	assert(this->slot_count > 0);
@@ -483,9 +498,9 @@ const KeyT BTree<KeyT, ValueT>::InnerNode::split(InnerNode &new_node,
 	return pivot_slot.get_key(this->get_data());
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-bool BTree<KeyT, ValueT>::InnerNode::insert_split(const KeyT &new_pivot,
-												  PageID new_child) {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+bool BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::insert_split(
+	const KeyT &new_pivot, PageID new_child) {
 	// Sanity checks.
 	assert(has_space(new_pivot));
 	assert(upper);
@@ -525,9 +540,9 @@ bool BTree<KeyT, ValueT>::InnerNode::insert_split(const KeyT &new_pivot,
 	return true;
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-bool BTree<KeyT, ValueT>::InnerNode::insert(const KeyT &new_pivot,
-											PageID new_child) {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+bool BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::insert(const KeyT &new_pivot,
+														  PageID new_child) {
 	// Sanity checks.
 	assert(has_space(new_pivot));
 
@@ -560,8 +575,9 @@ bool BTree<KeyT, ValueT>::InnerNode::insert(const KeyT &new_pivot,
 	return true;
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-std::vector<PageID> BTree<KeyT, ValueT>::InnerNode::get_children() {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+std::vector<PageID>
+BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::get_children() {
 	std::vector<PageID> children{};
 	for (uint16_t i = 0; i < this->slot_count; ++i) {
 		auto &slot = *(slots_begin() + i);
@@ -570,8 +586,8 @@ std::vector<PageID> BTree<KeyT, ValueT>::InnerNode::get_children() {
 	return children;
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-void BTree<KeyT, ValueT>::InnerNode::print() {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::print() {
 	// Print Header.
 	std::cout << "	data_start: " << this->data_start;
 	std::cout << ", level: " << this->level;
@@ -584,18 +600,17 @@ void BTree<KeyT, ValueT>::InnerNode::print() {
 	std::cout << "  upper: " << upper << std::endl;
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-BTree<KeyT, ValueT>::InnerNode::Pivot::Pivot(std::byte *page_begin,
-											 uint32_t offset, const KeyT &key,
-											 PageID child)
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::Pivot::Pivot(
+	std::byte *page_begin, uint32_t offset, const KeyT &key, PageID child)
 	: Node::Slot(offset, key.size()), child(child) {
 	// Store key at offset. Caller must ensure that it has enough space for
 	// `key.size()`.
 	key.serialize(page_begin + offset);
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-void BTree<KeyT, ValueT>::InnerNode::Pivot::print(
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::Pivot::print(
 	const std::byte *begin) const {
 	std::cout << "  offset: " << this->offset;
 	std::cout << ", key_size: " << this->key_size;
@@ -603,10 +618,9 @@ void BTree<KeyT, ValueT>::InnerNode::Pivot::print(
 	std::cout << ", child: " << child << std::endl;
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-const KeyT BTree<KeyT, ValueT>::LeafNode::split(LeafNode &new_node,
-												const KeyT &key,
-												size_t page_size) {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+const KeyT BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::split(
+	LeafNode &new_node, const KeyT &key, size_t page_size) {
 
 	++stats.leaf_node_splits;
 	assert(this->slot_count >= 1);
@@ -617,8 +631,9 @@ const KeyT BTree<KeyT, ValueT>::LeafNode::split(LeafNode &new_node,
 	auto *buffer_node = reinterpret_cast<LeafNode *>(&buffer[0]);
 
 	// Determine how many keys go left/right.
-	// If the new key goes in the left node, move more entries to the new right
-	// node. Important when having a tree where each leaf holds only one entry.
+	// If the new key goes in the left node, move more entries to the new
+	// right node. Important when having a tree where each leaf holds only
+	// one entry.
 	const auto &middle_slot =
 		*(buffer_node->slots_begin() + ((buffer_node->slot_count + 1) / 2) - 1);
 	const auto &middle_key = middle_slot.get_key(this->get_data());
@@ -661,9 +676,9 @@ const KeyT BTree<KeyT, ValueT>::LeafNode::split(LeafNode &new_node,
 	return pivot_slot.get_key(this->get_data());
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-BTree<KeyT, ValueT>::LeafNode::LeafSlot *
-BTree<KeyT, ValueT>::LeafNode::lower_bound(const KeyT &key) {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::LeafSlot *
+BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::lower_bound(const KeyT &key) {
 	auto comp = [&](const LeafSlot &slot, const KeyT &key) -> bool {
 		const auto &slot_key = slot.get_key(this->get_data());
 		return slot_key < key;
@@ -672,8 +687,9 @@ BTree<KeyT, ValueT>::LeafNode::lower_bound(const KeyT &key) {
 	return std::lower_bound(slots_begin(), slots_end(), key, comp);
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-std::optional<ValueT> BTree<KeyT, ValueT>::LeafNode::lookup(const KeyT &key) {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+std::optional<ValueT>
+BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::lookup(const KeyT &key) {
 	auto *slot = lower_bound(key);
 
 	if (slot == slots_end())
@@ -686,9 +702,9 @@ std::optional<ValueT> BTree<KeyT, ValueT>::LeafNode::lookup(const KeyT &key) {
 	return {slot->get_value(this->get_data())};
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-bool BTree<KeyT, ValueT>::LeafNode::insert(const KeyT &key,
-										   const ValueT &value) {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+bool BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::insert(const KeyT &key,
+														 const ValueT &value) {
 	assert(has_space(key, value));
 	// Find insert position.
 	auto *slot_target = lower_bound(key);
@@ -717,8 +733,8 @@ bool BTree<KeyT, ValueT>::LeafNode::insert(const KeyT &key,
 	return true;
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-void BTree<KeyT, ValueT>::LeafNode::print() {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::print() {
 	// Print Header.
 	std::cout << ",	data_start: " << this->data_start;
 	std::cout << ",	level: " << this->level;
@@ -730,19 +746,18 @@ void BTree<KeyT, ValueT>::LeafNode::print() {
 	}
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-BTree<KeyT, ValueT>::LeafNode::LeafSlot::LeafSlot(std::byte *page_begin,
-												  uint32_t offset,
-												  const KeyT &key,
-												  const ValueT &value)
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::LeafSlot::LeafSlot(
+	std::byte *page_begin, uint32_t offset, const KeyT &key,
+	const ValueT &value)
 	: Node::Slot(offset, key.size()), value_size(value.size()) {
 	// Copy key and value into the slot's buffer.
 	key.serialize(page_begin + offset);
 	value.serialize(page_begin + offset + key.size());
 };
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-const ValueT BTree<KeyT, ValueT>::LeafNode::LeafSlot::get_value(
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+const ValueT BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::LeafSlot::get_value(
 	const std::byte *begin) const {
 	assert(value_size);
 	// Returns a view to the slot's buffer.
@@ -750,8 +765,8 @@ const ValueT BTree<KeyT, ValueT>::LeafNode::LeafSlot::get_value(
 							   value_size);
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-void BTree<KeyT, ValueT>::LeafNode::LeafSlot::print(
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::LeafSlot::print(
 	const std::byte *begin) const {
 	std::cout << "  offset: " << this->offset;
 	std::cout << ", key_size: " << this->key_size;
@@ -768,6 +783,8 @@ template struct BTree<UInt64, String>;
 template struct BTree<String, TID>;
 template struct BTree<String, UInt64>;
 template struct BTree<String, String>;
+template struct BTree<UInt64, TID, true>;
+template struct BTree<String, TID, true>;
 template struct BTree<PID, Deltas<UInt64, TID>>;
 template struct BTree<PID, Deltas<String, TID>>;
 // --------------------------------------------------------------

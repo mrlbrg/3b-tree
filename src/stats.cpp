@@ -9,7 +9,7 @@ void Stats::clear() {
 	leaf_node_splits = 0;
 	bytes_written_logically = 0;
 	bytes_written_physically = 0;
-	pages_swapped = 0;
+	pages_evicted = 0;
 	pages_written = 0;
 }
 
@@ -20,7 +20,7 @@ std::ostream &operator<<(std::ostream &os, const Stats &stats) {
 	   << std::endl;
 	os << "bytes_written_physically: " << stats.bytes_written_physically
 	   << std::endl;
-	os << "pages_swapped: " << stats.pages_swapped << std::endl;
+	os << "pages_evicted: " << stats.pages_evicted << std::endl;
 	os << "pages_written: " << stats.pages_written << std::endl;
 
 	return os;

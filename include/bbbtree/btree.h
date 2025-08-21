@@ -15,8 +15,13 @@
 // running the B-Tree (e.g. root page id). We only persist the state on
 // destruction. Might want to maintain state through the buffer manager during
 // runtime though.
+// TODO: Made everything public for the delta tree to access intrinsics of the
+// BTree. Friend declaration did not work, because it instantiated illegal code
+// of the DeltaTree expecting the slot to have the `state` member. Try with
+// `template <typename U> friend class DeltaTree;` later.
 
 namespace bbbtree {
+// -----------------------------------------------------------------
 /// Requirements for the keys and values of the index.
 template <typename T>
 concept Serializable =
@@ -31,51 +36,80 @@ concept Serializable =
 		/// memory pointer to by `src`.
 		{ T::deserialize(src, n) } -> std::same_as<T>;
 	};
+// -----------------------------------------------------------------
 /// Keys and value need to be equality comparable for testing.
 template <typename T>
 concept Testable = requires(T a, T b) {
 	{ a == b } -> std::convertible_to<bool>;
 };
+// -----------------------------------------------------------------
 /// Requirements to search for keys in the B-Tree.
 template <typename T>
 concept LowerBoundable = requires(T a, T b) {
 	{ a <= b } -> std::convertible_to<bool>;
 };
+// -----------------------------------------------------------------
 /// Requires printing to std::cout.
 template <typename T>
 concept Printable = requires(T a) {
 	{ std::cout << a } -> std::same_as<std::ostream &>;
 };
+// -----------------------------------------------------------------
 /// Requirements for the values of the index.
 template <typename T>
 concept ValueIndexable = Serializable<T> && Testable<T> && Printable<T>;
+// -----------------------------------------------------------------
 /// Requirements for the keys of the index.
 template <typename T>
 concept KeyIndexable = ValueIndexable<T> && LowerBoundable<T>;
+// -----------------------------------------------------------------
+/// Types of operations performed on the index.
+enum class OperationType : uint8_t {
+	None = 0,
+	Insert = 1,
+	Update = 2,
+	Delete = 3
+};
+// -----------------------------------------------------------------
+/// If we track deltas, we need to store additional state in the Slot.
+/// Template specializations must be at namespace scope, so we put it here.
+/// TODO: Adding 1B for state brings the size of the slot to 12B. This affects
+/// fanout. Try something better.
+template <bool TrackDeltas> struct SlotBase {};
+template <> struct SlotBase<true> {
+	OperationType state = OperationType::None;
 
+	/// Returns true if this slot is dirty.
+	inline bool is_dirty() const { return state != OperationType::None; }
+};
+// -----------------------------------------------------------------
 /// External Storage index that maps from unique, possibly variable-length keys
 /// to TID identifying the tuple's location on the slotted pages. Due to
 /// variable-size key-support, we implement slots that map to <key, TID> pairs
 /// within a tree node.
 /// Keys and Values cannot be bigger than 64 KB (Slots have 16 bits for the size
 /// of each).
-/// TODO: Later we want to store deltas in a BTree too, therefore we need to
-/// template on a variable-sized `ValueT`.
+/// Values can also be deltas of a delta tree.
 /// TODO: Single threaded for now.
 /// TODO: Does not implement delete yet. When deleting keys, we do not
 /// re-use/compactify the space nor merge nodes. We leave nodes fragmented.
-/// TODO: We cannot use one file per index if we want to have several trees
+/// TODO: We should not use one file per index if we want to have several trees
 /// later.
-template <KeyIndexable KeyT, ValueIndexable ValueT>
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree = false>
 struct BTree : public Segment {
 
 	/// Constructor. Not thread-safe.
-	BTree(SegmentID segment_id, BufferManager &buffer_manager);
+	BTree(SegmentID segment_id, BufferManager &buffer_manager,
+		  PageLogic *page_logic = nullptr);
 
 	/// Destructor.
 	~BTree();
 
 	/// Lookup an entry in the tree. Returns `nullopt` if key was not found.
+	/// TODO: Not thread-safe, bc. the returns `ValueT` is a view into the
+	/// node's data. Use with care and copy the value if necessary e.g. when
+	/// multithreading. Only works single-threaded, when using the value before
+	/// modfying the tree again.
 	std::optional<ValueT> lookup(const KeyT &key);
 
 	/// Erase an entry in the tree.
@@ -96,7 +130,6 @@ struct BTree : public Segment {
 	/// Not thread-safe.
 	size_t height();
 
-  protected:
 	/// TODO: Find a more elegant solution for persistency:
 	/// State is persisted at page 0 of this segment.
 	/// Read and written out at construction/destruction time.
@@ -122,8 +155,8 @@ struct BTree : public Segment {
 		/// Is other Node self?
 		bool operator==(const Node &other) const { return this == &other; }
 
-	  protected:
-		struct Slot {
+		/// A slot in a node. Contains position and size of the key.
+		struct Slot : public SlotBase<UseDeltaTree> {
 			/// Default Constructor.
 			Slot() = delete;
 			/// Constructor.
@@ -195,7 +228,6 @@ struct BTree : public Segment {
 		/// Print to standard output.
 		void print();
 
-	  private:
 		/// Indicates the position and length of the key within the page.
 		/// Contains the key's corresponding child (PageID).
 		struct Pivot final : public Node::Slot {
@@ -227,8 +259,17 @@ struct BTree : public Segment {
 			return reinterpret_cast<Pivot *>(this->get_data() +
 											 sizeof(InnerNode));
 		}
+		/// Get begin of slots section.
+		const Pivot *slots_begin() const {
+			return reinterpret_cast<const Pivot *>(this->get_data() +
+												   sizeof(InnerNode));
+		}
 		/// Get end of slots section.
 		Pivot *slots_end() { return slots_begin() + this->slot_count; }
+		/// Get end of slots section.
+		const Pivot *slots_end() const {
+			return slots_begin() + this->slot_count;
+		}
 
 		/// Get free space in bytes. Equals the space between the header + slots
 		/// and data section.
@@ -275,7 +316,10 @@ struct BTree : public Segment {
 		}
 
 		/// Get the index of the first key that is not less than than a provided
-		/// key.
+		/// key. TODO: Some `ValueT` like `String` only return a view onto the
+		/// node. This can become a dangling reference if the node is released.
+		/// Use with care and copy the value if necessary e.g. when
+		/// multithreading.
 		std::optional<ValueT> lookup(const KeyT &key);
 
 		/// Inserts a key, value pair into this leaf. Returns true if key was
@@ -292,7 +336,6 @@ struct BTree : public Segment {
 		/// Print leaf to standard output.
 		void print();
 
-	  private:
 		/// Get free space in bytes. Equals the space between the header + slots
 		/// and data section.
 		size_t get_free_space() const {
@@ -310,10 +353,18 @@ struct BTree : public Segment {
 			return reinterpret_cast<LeafSlot *>(this->get_data() +
 												sizeof(LeafNode));
 		}
+		/// Get beginning of slots section.
+		const LeafSlot *slots_begin() const {
+			return reinterpret_cast<const LeafSlot *>(this->get_data() +
+													  sizeof(LeafNode));
+		}
 		/// Get end of slots section.
 		LeafSlot *slots_end() { return slots_begin() + this->slot_count; }
+		/// Get end of slots section.
+		const LeafSlot *slots_end() const {
+			return slots_begin() + this->slot_count;
+		}
 
-	  public:
 		/// The minimum of space required on a page to store a single entry.
 		static const constexpr size_t min_space =
 			sizeof(LeafNode) + sizeof(LeafSlot);
@@ -326,6 +377,9 @@ struct BTree : public Segment {
 	PageID root;
 	/// The next free, unique page ID.
 	PageID next_free_page;
+	/// The page logic specific to this tree. Called back by the buffer manager
+	/// when loading/unloading pages.
+	PageLogic *page_logic;
 
 	/// Returns the appropriate leaf page for a given key.
 	/// Potentially splits nodes if full.
@@ -338,4 +392,5 @@ struct BTree : public Segment {
 
 	PageID get_new_page();
 };
+// -----------------------------------------------------------------
 } // namespace bbbtree

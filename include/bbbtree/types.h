@@ -91,7 +91,7 @@ struct String {
 	uint16_t size() const { return view.size(); }
 	/// Serializes this type into bytes to store on pages.
 	void serialize(std::byte *dst) const {
-		std::memcpy(dst, view.data(), size());
+		std::memcpy(dst, view.data(), view.size());
 	}
 	/// Deserializes the bytes into the type.
 	static String deserialize(const std::byte *data, uint16_t num_bytes) {

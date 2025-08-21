@@ -1,14 +1,16 @@
 #pragma once
 
 #include "bbbtree/buffer_manager.h"
-#include "bbbtree/segment.h"
 
 #include <unordered_map>
 
 namespace bbbtree {
 
 // An in-memory map.
-template <typename KeyT, typename ValueT> class Map {
+template <typename KeyT, typename ValueT, bool UseDeltaTree = false> class Map {
+	static_assert(!UseDeltaTree,
+				  "Map does not support delta trees. Use BBBTree instead.");
+
   public:
 	/// Constructor.
 	Map() : map() {}

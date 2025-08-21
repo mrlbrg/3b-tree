@@ -9,7 +9,7 @@
 
 namespace bbbtree {
 // -----------------------------------------------------------------
-template <template <typename, typename> typename IndexT, typename KeyT>
+template <template <typename, typename, bool> typename IndexT, typename KeyT>
 	requires IndexInterface<IndexT, KeyT>
 Database<IndexT, KeyT>::Database(size_t page_size, size_t num_pages, bool reset)
 	: buffer_manager(page_size, num_pages, reset),
@@ -17,7 +17,7 @@ Database<IndexT, KeyT>::Database(size_t page_size, size_t num_pages, bool reset)
 	  records(SP_SEGMENT_ID, buffer_manager, space_inventory),
 	  index(INDEX_SEGMENT_ID, buffer_manager) {}
 // -----------------------------------------------------------------
-template <template <typename, typename> typename IndexT, typename KeyT>
+template <template <typename, typename, bool> typename IndexT, typename KeyT>
 	requires IndexInterface<IndexT, KeyT>
 void Database<IndexT, KeyT>::insert(const Tuple &tuple) {
 	// Get a new TID
@@ -35,7 +35,7 @@ void Database<IndexT, KeyT>::insert(const Tuple &tuple) {
 	stats.bytes_written_logically += sizeof(tuple);
 }
 // -----------------------------------------------------------------
-template <template <typename, typename> typename IndexT, typename KeyT>
+template <template <typename, typename, bool> typename IndexT, typename KeyT>
 	requires IndexInterface<IndexT, KeyT>
 void Database<IndexT, KeyT>::insert(const std::vector<Tuple> &tuples) {
 	// TODO: Detect sequential inserts?
@@ -43,7 +43,7 @@ void Database<IndexT, KeyT>::insert(const std::vector<Tuple> &tuples) {
 		insert(tuple);
 }
 // -----------------------------------------------------------------
-template <template <typename, typename> typename IndexT, typename KeyT>
+template <template <typename, typename, bool> typename IndexT, typename KeyT>
 	requires IndexInterface<IndexT, KeyT>
 Database<IndexT, KeyT>::Tuple Database<IndexT, KeyT>::get(const KeyT &key) {
 	// Get TID for key
@@ -63,7 +63,7 @@ Database<IndexT, KeyT>::Tuple Database<IndexT, KeyT>::get(const KeyT &key) {
 	return tuple;
 }
 // -----------------------------------------------------------------
-template <template <typename, typename> typename IndexT, typename KeyT>
+template <template <typename, typename, bool> typename IndexT, typename KeyT>
 	requires IndexInterface<IndexT, KeyT>
 void Database<IndexT, KeyT>::erase(const KeyT & /*key*/) {
 	// TODO. Also update stats here.
