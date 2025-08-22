@@ -34,15 +34,7 @@ BufferManager::BufferManager(size_t page_size, size_t page_count, bool clear)
 	}
 }
 // -----------------------------------------------------------------
-BufferManager::~BufferManager() {
-	for (auto &frame : page_frames) {
-		// No callbacks at destruction time. Page Logic must not be accessed,
-		// since its already destroyed. Just force out all pages at
-		// destruction-time.
-		// frame.page_logic = nullptr;
-		remove(frame);
-	}
-}
+BufferManager::~BufferManager() { clear_all(); }
 // ----------------------------------------------------------------
 void BufferManager::reset(BufferFrame &frame) {
 	assert(!frame.in_use_by);

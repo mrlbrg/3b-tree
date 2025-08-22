@@ -52,7 +52,8 @@ TEST_F(BBBTreeTest, EvictNode) {
 
 	// Force an eviction of the BTree. Should call back into Delta Tree to store
 	// its nodes.
-	buffer_manager_->clear_all();
+	Reset(false);
+	// buffer_manager_->clear_all();
 	bbbtree_int_->print();
 
 	Reset(false);
