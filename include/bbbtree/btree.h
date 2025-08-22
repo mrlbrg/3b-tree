@@ -19,6 +19,7 @@
 // BTree. Friend declaration did not work, because it instantiated illegal code
 // of the DeltaTree expecting the slot to have the `state` member. Try with
 // `template <typename U> friend class DeltaTree;` later.
+// TODO: Store key and value sizes in the page, not the slot.
 
 namespace bbbtree {
 // -----------------------------------------------------------------
@@ -65,23 +66,19 @@ concept KeyIndexable = ValueIndexable<T> && LowerBoundable<T>;
 // -----------------------------------------------------------------
 /// Types of operations performed on the index.
 enum class OperationType : uint8_t {
-	None = 0,
+	None = 0, // Default initialized value
 	Insert = 1,
 	Update = 2,
 	Delete = 3
 };
+std::ostream &operator<<(std::ostream &os, const OperationType &type);
 // -----------------------------------------------------------------
 /// If we track deltas, we need to store additional state in the Slot.
 /// Template specializations must be at namespace scope, so we put it here.
 /// TODO: Adding 1B for state brings the size of the slot to 12B. This affects
 /// fanout. Try something better.
 template <bool TrackDeltas> struct SlotBase {};
-template <> struct SlotBase<true> {
-	OperationType state = OperationType::None;
-
-	/// Returns true if this slot is dirty.
-	inline bool is_dirty() const { return state != OperationType::None; }
-};
+template <> struct SlotBase<true> {};
 // -----------------------------------------------------------------
 /// External Storage index that maps from unique, possibly variable-length keys
 /// to TID identifying the tuple's location on the slotted pages. Due to
@@ -157,6 +154,8 @@ struct BTree : public Segment {
 
 		/// A slot in a node. Contains position and size of the key.
 		struct Slot : public SlotBase<UseDeltaTree> {
+			struct EmptySlotState {};
+
 			/// Default Constructor.
 			Slot() = delete;
 			/// Constructor.
@@ -171,6 +170,11 @@ struct BTree : public Segment {
 			uint32_t offset;
 			/// The number of bytes from offset to end of key.
 			uint16_t key_size;
+			/// A conditional state for a BTree that needs to track deltas.
+			/// `no_unique_address` ensures that this does not increase the size
+			/// of a slot without this member.
+			[[no_unique_address]] std::conditional_t<
+				UseDeltaTree, OperationType, EmptySlotState> state;
 		};
 		/// Get data.
 		std::byte *get_data() { return reinterpret_cast<std::byte *>(this); }

@@ -163,8 +163,8 @@ void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 	while (true) {
 		auto *curr_frame = &buffer_manager.fix_page(segment_id, root, true);
 		auto *curr_node = reinterpret_cast<InnerNode *>(curr_frame->get_data());
-		// All nodes that lie on the path to the key with the leaf at front
-		// and root in back.
+		// All nodes that lie on the path to the key with the leaf in the back
+		// and root in front.
 		std::deque<BufferFrame *> path{curr_frame};
 		// All nodes we touch are locked. Must be released in the end.
 		std::vector<BufferFrame *> locked_nodes{curr_frame};
@@ -302,6 +302,7 @@ void BTree<KeyT, ValueT, UseDeltaTree>::print() {
 
 			// Sanity Check.
 			assert(node->level == level);
+			std::cout << "[" << sizeof(*node) << "B] ";
 			std::cout << "PID " << pid;
 			node->print();
 			std::cout << "-----------------------------------------------------"
@@ -331,6 +332,7 @@ void BTree<KeyT, ValueT, UseDeltaTree>::print() {
 		// Sanity Check.
 		assert(leaf->level == level);
 
+		std::cout << "[" << sizeof(*leaf) << "B] ";
 		std::cout << "PID " << pid;
 		leaf->print();
 		std::cout << "-----------------------------------------------------"
@@ -612,6 +614,8 @@ BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::Pivot::Pivot(
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::Pivot::print(
 	const std::byte *begin) const {
+	std::cout << "[" << sizeof(*this) << "B + " << this->key_size << "B + "
+			  << sizeof(this->child) << "B] ";
 	std::cout << "  offset: " << this->offset;
 	std::cout << ", key_size: " << this->key_size;
 	std::cout << ", pivot: " << this->get_key(begin);
@@ -736,9 +740,9 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::insert(const KeyT &key,
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::print() {
 	// Print Header.
-	std::cout << ",	data_start: " << this->data_start;
-	std::cout << ",	level: " << this->level;
-	std::cout << ",	slot_count: " << this->slot_count << std::endl;
+	std::cout << ", data_start: " << this->data_start;
+	std::cout << ", level: " << this->level;
+	std::cout << ", slot_count: " << this->slot_count << std::endl;
 
 	// Print Slots.
 	for (const auto *slot = slots_begin(); slot < slots_end(); ++slot) {
@@ -768,12 +772,35 @@ const ValueT BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::LeafSlot::get_value(
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::LeafSlot::print(
 	const std::byte *begin) const {
+
+	std::cout << "[" << sizeof(*this) << "B + " << this->key_size << "B + "
+			  << this->value_size << "B] ";
 	std::cout << "  offset: " << this->offset;
 	std::cout << ", key_size: " << this->key_size;
 	std::cout << ", value_size: " << value_size;
 
 	std::cout << ", key: " << this->get_key(begin);
 	std::cout << ", value: " << get_value(begin) << std::endl;
+}
+std::ostream &operator<<(std::ostream &os, const OperationType &type) {
+	switch (type) {
+	case OperationType::None:
+		os << "None";
+		break;
+	case OperationType::Insert:
+		os << "Insert";
+		break;
+	case OperationType::Delete:
+		os << "Delete";
+		break;
+	case OperationType::Update:
+		os << "Update";
+		break;
+	default:
+		os << "Unknown";
+		break;
+	}
+	return os;
 }
 // -----------------------------------------------------------------
 // Explicit instantiations

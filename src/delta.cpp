@@ -58,24 +58,7 @@ void Delta<KeyT, ValueT>::deserialize(const std::byte *src) {
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
 std::ostream &operator<<(std::ostream &os, const Delta<KeyT, ValueT> &type) {
-	switch (type.op) {
-	case OperationType::None:
-		os << "None";
-		break;
-	case OperationType::Insert:
-		os << "Insert";
-		break;
-	case OperationType::Update:
-		os << "Update";
-		break;
-	case OperationType::Delete:
-		os << "Delete";
-		break;
-	default:
-		os << "Unknown";
-		break;
-	}
-
+	os << type.op;
 	os << ": [" << type.entry.key << ", " << type.entry.value << "]";
 
 	return os;
@@ -155,14 +138,16 @@ uint16_t Deltas<KeyT, ValueT>::num_deltas() const {
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
 std::ostream &operator<<(std::ostream &os, const Deltas<KeyT, ValueT> &type) {
-	os << "Deltas:" << std::endl;
+	os << " Deltas: [" << type.size() << "B] [";
 	std::visit(
 		[&](auto &&arg) {
-			for (const auto &delta : arg)
-				os << delta << std::endl;
+			for (const auto &delta : arg) {
+				os << delta;
+				os << " ";
+			}
 		},
 		type.deltas);
-
+	os << "]";
 	return os;
 }
 // -----------------------------------------------------------------

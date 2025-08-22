@@ -76,6 +76,7 @@ template <KeyIndexable KeyT, ValueIndexable ValueT>
 void BBBTree<KeyT, ValueT>::print() {
 	std::cout << "B-Tree:" << std::endl;
 	btree.print();
+
 	std::cout << "Delta Tree:" << std::endl;
 	delta_tree.print();
 }
