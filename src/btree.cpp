@@ -31,32 +31,27 @@ BTree<KeyT, ValueT, UseDeltaTree>::BTree(SegmentID segment_id,
 	root = state.root;
 	next_free_page = state.next_free_page;
 
+	bool is_dirty = false;
+
 	// Start a new tree?
 	if (next_free_page == 0) {
 		root = 1;
 		next_free_page = 2;
+		state.root = root;
+		state.next_free_page = next_free_page;
 		// Intialize root node.
 		auto &root_page =
 			buffer_manager.fix_page(segment_id, root, true, page_logic);
 		new (root_page.get_data()) LeafNode(buffer_manager.page_size);
 		buffer_manager.unfix_page(root_page, true);
+		is_dirty = true;
 	}
 
-	buffer_manager.unfix_page(frame, false);
+	buffer_manager.unfix_page(frame, is_dirty);
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
-BTree<KeyT, ValueT, UseDeltaTree>::~BTree() {
-	// Write out all meta-data needed to pick up index again later.
-	// Caller must make sure that Buffer Manager is destroyed after this,
-	// not before. Otherwise this state is lost.
-	auto &frame = buffer_manager.fix_page(segment_id, 0, true);
-	auto &state = *(reinterpret_cast<BTree<KeyT, ValueT, UseDeltaTree> *>(
-		frame.get_data()));
-	state.root = root;
-	state.next_free_page = next_free_page;
-	buffer_manager.unfix_page(frame, true);
-}
+BTree<KeyT, ValueT, UseDeltaTree>::~BTree() {}
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 std::optional<ValueT>
@@ -146,9 +141,15 @@ restart:
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 PageID BTree<KeyT, ValueT, UseDeltaTree>::get_new_page() {
-	// TODO: Synchronize this when multi-threading.
+	auto &frame = buffer_manager.fix_page(segment_id, 0, true);
+	auto &state = *(reinterpret_cast<BTree<KeyT, ValueT, UseDeltaTree> *>(
+		frame.get_data()));
+
 	auto page_id = next_free_page;
 	++next_free_page;
+	state.next_free_page = next_free_page;
+
+	buffer_manager.unfix_page(frame, true);
 
 	return page_id;
 }
@@ -212,7 +213,16 @@ void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 			// Arrived at root? Create new root.
 			if (curr_level > max_level) {
 				auto old_root = root;
-				root = get_new_page();
+				auto new_root = get_new_page();
+
+				auto &frame = buffer_manager.fix_page(segment_id, 0, true);
+				auto &state =
+					*(reinterpret_cast<BTree<KeyT, ValueT, UseDeltaTree> *>(
+						frame.get_data()));
+				root = new_root;
+				state.root = new_root;
+				buffer_manager.unfix_page(frame, true);
+
 				auto *root_frame =
 					&buffer_manager.fix_page(segment_id, root, true);
 				new (root_frame->get_data())
@@ -574,6 +584,10 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::insert(const KeyT &new_pivot,
 	assert(reinterpret_cast<std::byte *>(slots_end()) <=
 		   this->get_data() + this->data_start);
 
+	if constexpr (UseDeltaTree) {
+		slot_target->state = OperationType::Insert;
+	}
+
 	return true;
 }
 // -----------------------------------------------------------------
@@ -620,6 +634,10 @@ void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::Pivot::print(
 	std::cout << ", key_size: " << this->key_size;
 	std::cout << ", pivot: " << this->get_key(begin);
 	std::cout << ", child: " << child << std::endl;
+
+	if constexpr (UseDeltaTree) {
+		std::cout << "    state: " << this->state << std::endl;
+	}
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
@@ -734,6 +752,11 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::insert(const KeyT &key,
 	assert(reinterpret_cast<std::byte *>(slots_end()) <=
 		   this->get_data() + this->data_start);
 
+	// Track delta.
+	if constexpr (UseDeltaTree) {
+		slot_target->state = OperationType::Insert;
+	}
+
 	return true;
 }
 // -----------------------------------------------------------------
@@ -781,6 +804,10 @@ void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::LeafSlot::print(
 
 	std::cout << ", key: " << this->get_key(begin);
 	std::cout << ", value: " << get_value(begin) << std::endl;
+
+	if constexpr (UseDeltaTree) {
+		std::cout << "    state: " << this->state << std::endl;
+	}
 }
 std::ostream &operator<<(std::ostream &os, const OperationType &type) {
 	switch (type) {
