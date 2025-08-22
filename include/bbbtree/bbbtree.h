@@ -24,7 +24,7 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 
 	/// Scans the given BTree node for dirty entries and buffers them in the
 	/// delta tree.
-	bool before_unload(const BufferFrame &frame) override;
+	bool before_unload(BufferFrame &frame) override;
 	/// Looks up the deltas for the given node and applies them.
 	void after_load(const BufferFrame &frame) override;
 };

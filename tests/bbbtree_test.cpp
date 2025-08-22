@@ -18,8 +18,8 @@ class BBBTreeTest : public ::testing::Test {
 	void Reset(bool clear_files) {
 		// BTrees use the buffer manager to persist their state at
 		// destruction-time. Therefore we must delete the BTree first.
-		bbbtree_int_.reset();
 		buffer_manager_.reset();
+		bbbtree_int_.reset();
 		// Create anew.
 		buffer_manager_ = std::make_unique<BufferManager>(
 			TEST_PAGE_SIZE, TEST_NUM_PAGES, clear_files);

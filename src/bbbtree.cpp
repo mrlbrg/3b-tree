@@ -3,22 +3,35 @@
 namespace bbbtree {
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
-bool DeltaTree<KeyT, ValueT>::before_unload(const BufferFrame &frame) {
-	// TODO: When we decide to write out because
+bool DeltaTree<KeyT, ValueT>::before_unload(BufferFrame &frame) {
+	// When we return true to decide to write out because
 	// write amplification is low,
 	// we must clean the slots of their dirty state here.
 
-	if (frame.is_new())
+	auto *node = reinterpret_cast<BTree<KeyT, ValueT, true>::InnerNode *>(
+		frame.get_data());
+
+	if (frame.is_new()) {
+		// Clean all slots of their dirty state.
+		if (node->is_leaf()) {
+			auto *leaf =
+				reinterpret_cast<BTree<KeyT, ValueT, true>::LeafNode *>(node);
+
+			for (auto *slot = leaf->slots_begin(); slot < leaf->slots_end();
+				 ++slot)
+				slot->state = OperationType::None;
+
+		} else {
+			for (auto *slot = node->slots_begin(); slot < node->slots_end();
+				 ++slot)
+				slot->state = OperationType::None;
+		}
 		return true;
+	}
 
 	assert(frame.is_dirty()); // Must be dirty and not new. If
 							  // its new its forced out since we
 							  // need a valid header on disk.
-
-	// Get node type: Leaf or Inner Node.
-	const auto *node =
-		reinterpret_cast<const BTree<KeyT, ValueT, true>::InnerNode *>(
-			frame.get_data());
 
 	if (node->is_leaf()) {
 		const auto *leaf =
@@ -31,8 +44,10 @@ bool DeltaTree<KeyT, ValueT>::before_unload(const BufferFrame &frame) {
 		LeafDeltas deltas{};
 		for (const auto *slot = leaf->slots_begin(); slot < leaf->slots_end();
 			 ++slot) {
-			deltas.emplace_back(slot->state, slot->get_key(leaf->get_data()),
-								slot->get_value(leaf->get_data()));
+			if (slot->state == OperationType::Insert)
+				deltas.emplace_back(slot->state,
+									slot->get_key(leaf->get_data()),
+									slot->get_value(leaf->get_data()));
 		}
 		if (deltas.empty())
 			return true;
@@ -50,8 +65,9 @@ bool DeltaTree<KeyT, ValueT>::before_unload(const BufferFrame &frame) {
 		InnerNodeDeltas deltas{};
 		for (const auto *slot = node->slots_begin(); slot < node->slots_end();
 			 ++slot) {
-			deltas.emplace_back(slot->state, slot->get_key(node->get_data()),
-								slot->child);
+			if (slot->state == OperationType::Insert)
+				deltas.emplace_back(
+					slot->state, slot->get_key(node->get_data()), slot->child);
 		}
 		if (deltas.empty())
 			return true;

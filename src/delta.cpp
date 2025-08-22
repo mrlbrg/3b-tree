@@ -138,7 +138,7 @@ uint16_t Deltas<KeyT, ValueT>::num_deltas() const {
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
 std::ostream &operator<<(std::ostream &os, const Deltas<KeyT, ValueT> &type) {
-	os << " Deltas: [" << type.size() << "B] [";
+	os << " Deltas: [";
 	std::visit(
 		[&](auto &&arg) {
 			for (const auto &delta : arg) {

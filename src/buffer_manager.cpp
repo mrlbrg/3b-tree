@@ -39,7 +39,7 @@ BufferManager::~BufferManager() {
 		// No callbacks at destruction time. Page Logic must not be accessed,
 		// since its already destroyed. Just force out all pages at
 		// destruction-time.
-		frame.page_logic = nullptr;
+		// frame.page_logic = nullptr;
 		remove(frame);
 	}
 }
