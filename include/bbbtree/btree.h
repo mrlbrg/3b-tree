@@ -239,6 +239,10 @@ struct BTree : public Segment {
 			Pivot(std::byte *page_begin, uint32_t offset, const KeyT &key,
 				  PageID child);
 
+			PageID get_value(const std::byte * /*begin*/) const {
+				return child;
+			}
+
 			/// The child of this pivot.
 			PageID child;
 

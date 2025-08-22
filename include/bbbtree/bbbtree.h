@@ -16,6 +16,10 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 	using LeafDeltas = typename Deltas<KeyT, ValueT>::LeafDeltas;
 	using InnerNodeDeltas = typename Deltas<KeyT, ValueT>::InnerNodeDeltas;
 
+	using Node = BTree<KeyT, ValueT, true>::Node;
+	using LeafNode = BTree<KeyT, ValueT, true>::LeafNode;
+	using InnerNode = BTree<KeyT, ValueT, true>::InnerNode;
+
   public:
 	/// Constructor.
 	DeltaTree(SegmentID segment_id, BufferManager &buffer_manager)
@@ -27,6 +31,20 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 	bool before_unload(BufferFrame &frame) override;
 	/// Looks up the deltas for the given node and applies them.
 	void after_load(const BufferFrame &frame) override;
+
+  private:
+	/// Cleans the slots of a node of their dirty state. Done to reset the state
+	/// of a node when we want to actually write it out. The delta tracking
+	/// should only be kept in memory.
+	template <typename NodeT> void clean_node(NodeT *node);
+	/// Extracts the deltas from the node and stores them in the delta tree.
+	template <typename NodeT, typename DeltasT>
+	DeltasT extract_deltas(const NodeT *node, DeltasT &&deltas);
+
+	/// Calls the correct cleaning codefor the node type.
+	void clean_node(Node *node);
+	/// Calls the correct extraction code for the node type.
+	void store_deltas(PID &&page_id, const Node *node);
 };
 // -----------------------------------------------------------------
 /// A B-Tree that can buffer its deltas. Cannot just inherit from `BTree`
