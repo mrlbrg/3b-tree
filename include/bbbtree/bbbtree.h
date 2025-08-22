@@ -28,6 +28,7 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 
 	/// Scans the given BTree node for dirty entries and buffers them in the
 	/// delta tree.
+	/// TODO: Maybe only pass the frame data instead of the whole frame.
 	bool before_unload(BufferFrame &frame) override;
 	/// Looks up the deltas for the given node and applies them.
 	void after_load(const BufferFrame &frame) override;

@@ -21,6 +21,13 @@ BTree<KeyT, ValueT, UseDeltaTree>::BTree(SegmentID segment_id,
 										 BufferManager &buffer_manager,
 										 PageLogic *page_logic)
 	: Segment(segment_id, buffer_manager), page_logic(page_logic) {
+
+	// Sanity Check.
+	if constexpr (UseDeltaTree) {
+		assert(page_logic &&
+			   "When delta tree is enabled, `page_logic` must be provided");
+	}
+
 	// TODO: Create some meta-data segment that stores information like the
 	// root's page id on file.
 	auto &frame = buffer_manager.fix_page(segment_id, 0, false);
