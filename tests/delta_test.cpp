@@ -29,7 +29,7 @@ class DeltaTest : public ::testing::Test {
 TEST_F(DeltaTest, DeltaSerialization) {
 
 	{
-		IntDelta expected_delta{OperationType::Insert, 42, 1001};
+		IntDelta expected_delta{OperationType::Inserted, 42, 1001};
 		std::vector<std::byte> buffer(expected_delta.size());
 		expected_delta.serialize(buffer.data());
 		IntDelta deserialized{};
@@ -39,7 +39,7 @@ TEST_F(DeltaTest, DeltaSerialization) {
 	}
 
 	{
-		StringDelta expected_delta{OperationType::Insert, {"Hello"}, 1001};
+		StringDelta expected_delta{OperationType::Inserted, {"Hello"}, 1001};
 		std::vector<std::byte> buffer(expected_delta.size());
 		expected_delta.serialize(buffer.data());
 		StringDelta deserialized{};
@@ -64,9 +64,9 @@ TEST_F(DeltaTest, DeltasSerialization) {
 	}
 	// Int deltas.
 	{
-		std::vector<IntDelta> values = {{OperationType::Insert, 42, 1001},
-										{OperationType::Update, 43, 1002},
-										{OperationType::Delete, 44, 1003}};
+		std::vector<IntDelta> values = {{OperationType::Inserted, 42, 1001},
+										{OperationType::Updated, 43, 1002},
+										{OperationType::Deleted, 44, 1003}};
 		IntDeltas deltas{std::move(values)};
 
 		std::vector<std::byte> buffer(deltas.size());
@@ -80,9 +80,9 @@ TEST_F(DeltaTest, DeltasSerialization) {
 	// String deltas.
 	{
 		std::vector<StringDelta> values = {
-			{OperationType::Insert, {"Hello"}, 1001},
-			{OperationType::Update, {"World"}, 1002},
-			{OperationType::Delete, {"!"}, 1003}};
+			{OperationType::Inserted, {"Hello"}, 1001},
+			{OperationType::Updated, {"World"}, 1002},
+			{OperationType::Deleted, {"!"}, 1003}};
 		StringDeltas deltas{std::move(values)};
 
 		std::vector<std::byte> buffer(deltas.size());
@@ -98,12 +98,12 @@ TEST_F(DeltaTest, DeltasSerialization) {
 TEST_F(DeltaTest, DeltaTree) {
 	IntDeltaTree delta_tree{342, *buffer_manager_};
 
-	std::vector<IntDelta> values1 = {{OperationType::Insert, 42, 1001},
-									 {OperationType::Update, 45, 1004}};
+	std::vector<IntDelta> values1 = {{OperationType::Inserted, 42, 1001},
+									 {OperationType::Updated, 45, 1004}};
 	std::vector<IntDelta> values2 = {};
-	std::vector<IntDelta> values3 = {{OperationType::Delete, 44, 1003},
-									 {OperationType::Update, 43, 1002},
-									 {OperationType::Insert, 46, 1003}};
+	std::vector<IntDelta> values3 = {{OperationType::Deleted, 44, 1003},
+									 {OperationType::Updated, 43, 1002},
+									 {OperationType::Inserted, 46, 1003}};
 
 	IntDeltas expected_deltas1{std::move(values1)};
 	IntDeltas expected_deltas2{std::move(values2)};

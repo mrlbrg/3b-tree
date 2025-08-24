@@ -21,6 +21,9 @@ struct UInt64 {
 	/// Constructor.
 	UInt64(uint64_t value) : value(value) {};
 
+	/// Conversion operator to uint64_t.
+	operator uint64_t() const { return value; }
+
 	/// Size of the serialized value.
 	static constexpr uint16_t size() { return sizeof(value); }
 	/// Serialize the value into bytes to store on pages.

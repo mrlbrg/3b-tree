@@ -66,10 +66,10 @@ concept KeyIndexable = ValueIndexable<T> && LowerBoundable<T>;
 // -----------------------------------------------------------------
 /// Types of operations performed on the index.
 enum class OperationType : uint8_t {
-	None = 0, // Default initialized value
-	Insert = 1,
-	Update = 2,
-	Delete = 3
+	Unchanged = 0, // Default initialized value
+	Inserted = 1,
+	Updated = 2,
+	Deleted = 3
 };
 std::ostream &operator<<(std::ostream &os, const OperationType &type);
 // -----------------------------------------------------------------
@@ -135,6 +135,8 @@ struct BTree : public Segment {
 	/// section and the data section. Only construct these on buffered pages
 	/// provided by the `buffer_manager`.
 	struct Node {
+		struct EmptyStruct {};
+
 		/// Upper end of data. Where new data can be prepended.
 		uint32_t data_start;
 		/// The level in the tree. Leafs are level 0.
@@ -154,8 +156,6 @@ struct BTree : public Segment {
 
 		/// A slot in a node. Contains position and size of the key.
 		struct Slot : public SlotBase<UseDeltaTree> {
-			struct EmptySlotState {};
-
 			/// Default Constructor.
 			Slot() = delete;
 			/// Constructor.
@@ -174,7 +174,7 @@ struct BTree : public Segment {
 			/// `no_unique_address` ensures that this does not increase the size
 			/// of a slot without this member.
 			[[no_unique_address]] std::conditional_t<
-				UseDeltaTree, OperationType, EmptySlotState> state;
+				UseDeltaTree, OperationType, EmptyStruct> state;
 		};
 		/// Get data.
 		std::byte *get_data() { return reinterpret_cast<std::byte *>(this); }
@@ -285,6 +285,8 @@ struct BTree : public Segment {
 			return this->data_start - sizeof(InnerNode) -
 				   this->slot_count * sizeof(Pivot);
 		};
+
+		void compactify();
 
 	  public:
 		static const constexpr size_t min_space =

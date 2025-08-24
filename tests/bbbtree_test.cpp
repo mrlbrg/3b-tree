@@ -22,11 +22,12 @@ class BBBTreeTest : public ::testing::Test {};
 // A dummy page logic that is used to test the callbacks of the buffer manager.
 template <bool ContinueUnload> class TestPageLogic : public PageLogic {
   public:
-	bool before_unload(BufferFrame & /*frame*/) override {
+	bool before_unload(char * /*data*/, const State & /*state*/,
+					   PageID /*page_id*/) override {
 		unload_called = true;
 		return ContinueUnload;
 	}
-	void after_load(const BufferFrame & /*frame*/) override {
+	void after_load(char * /*data*/, PageID /*page_id*/) override {
 		load_called = true;
 	}
 
@@ -186,7 +187,7 @@ TEST_F(BBBTreeTest, DeltaTree) {
 /// When a node of the BBBTree is evicted, its deltas are stored in the delta
 /// tree and not on disk.
 /// TODO: Later only when write amplification was high.
-TEST_F(BBBTreeTest, BufferDeltasInDeltaTree) {
+TEST_F(BBBTreeTest, BufferLeafDeltasInDeltaTree) {
 	std::unique_ptr<BufferManager> buffer_manager =
 		std::make_unique<BufferManager>(TEST_PAGE_SIZE, TEST_NUM_PAGES, true);
 	std::unique_ptr<BBBTreeInt> bbbtree_int =
@@ -211,8 +212,11 @@ TEST_F(BBBTreeTest, BufferDeltasInDeltaTree) {
 
 	// Create a delta on the node.
 	EXPECT_TRUE(bbbtree_int->insert(2, 2));
+	EXPECT_TRUE(bbbtree_int->insert(3, 2));
 	EXPECT_TRUE(bbbtree_int->lookup(2).has_value());
+	EXPECT_TRUE(bbbtree_int->lookup(3).has_value());
 	EXPECT_EQ(bbbtree_int->lookup(2), 2);
+	EXPECT_EQ(bbbtree_int->lookup(3), 2);
 
 	// Evict the BTree. Should trigger the eviction handler `before_unload` and
 	// discard the page.
@@ -225,11 +229,13 @@ TEST_F(BBBTreeTest, BufferDeltasInDeltaTree) {
 		BTreeInt btree_int{TEST_SEGMENT_ID, *buffer_manager,
 						   &non_applying_page_logic};
 		EXPECT_FALSE(btree_int.lookup(2).has_value());
+		EXPECT_FALSE(btree_int.lookup(3).has_value());
 		buffer_manager->clear_all();
 	}
 
 	// When loading the node again, the deltas should be applied.
 	EXPECT_TRUE(bbbtree_int->lookup(2).has_value());
+	EXPECT_TRUE(bbbtree_int->lookup(3).has_value());
 
 	// Destroy the Buffer Manager first, as some frames reference the
 	// BBBTree.

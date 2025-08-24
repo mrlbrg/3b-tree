@@ -46,8 +46,10 @@ void BufferManager::unload(BufferFrame &frame) {
 	// Sanity Check: Caller must ensure that page needs to be unloaded.
 	assert(frame.state == State::DIRTY || frame.state == State::NEW);
 
-	auto continue_unload =
-		frame.page_logic ? frame.page_logic->before_unload(frame) : true;
+	auto continue_unload = frame.page_logic
+							   ? frame.page_logic->before_unload(
+									 frame.data, frame.state, frame.page_id)
+							   : true;
 
 	if (!continue_unload)
 		return; // Unload is cancelled.
@@ -88,7 +90,7 @@ void BufferManager::load(BufferFrame &frame, SegmentID segment_id,
 
 	if (frame.page_logic)
 		// Call the page logic after loading.
-		frame.page_logic->after_load(frame);
+		frame.page_logic->after_load(frame.data, frame.page_id);
 }
 // -----------------------------------------------------------------
 BufferFrame &BufferManager::fix_page(SegmentID segment_id, PageID page_id,
@@ -122,8 +124,8 @@ void BufferManager::unfix_page(BufferFrame &frame, bool is_dirty) {
 	// TODO: Check if is_dirty, lock must have been exclusive.
 	assert(frame.in_use_by > 0);
 
-	if (is_dirty) // Do not overwrite NEW state.
-		frame.set_dirty();
+	if (is_dirty)
+		frame.set_dirty(); // Does not overwrite NEW state.
 
 	--frame.in_use_by;
 }

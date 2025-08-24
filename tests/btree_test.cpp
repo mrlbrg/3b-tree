@@ -171,19 +171,19 @@ TEST_F(BTreeTest, SingleNodeLookup) {
 	// Insert.
 	EXPECT_FALSE(btree_int_->lookup(1).has_value());
 	EXPECT_TRUE(btree_int_->insert(1, 2));
-	EXPECT_EQ(btree_int_->lookup(1), 2);
+	EXPECT_EQ(btree_int_->lookup(1).value(), UInt64(2));
 
 	// Insert in sort order.
 	EXPECT_TRUE(btree_int_->insert(3, 4));
-	EXPECT_EQ(btree_int_->lookup(1), 2);
-	EXPECT_EQ(btree_int_->lookup(3), 4);
+	EXPECT_EQ(btree_int_->lookup(1).value(), UInt64(2));
+	EXPECT_EQ(btree_int_->lookup(3).value(), UInt64(4));
 	EXPECT_FALSE(btree_int_->lookup(2).has_value());
 
 	// Insert out of sort order.
 	EXPECT_TRUE(btree_int_->insert(2, 6));
-	EXPECT_EQ(btree_int_->lookup(1), 2);
-	EXPECT_EQ(btree_int_->lookup(3), 4);
-	EXPECT_EQ(btree_int_->lookup(2), 6);
+	EXPECT_EQ(btree_int_->lookup(1).value(), UInt64(2));
+	EXPECT_EQ(btree_int_->lookup(3).value(), UInt64(4));
+	EXPECT_EQ(btree_int_->lookup(2).value(), UInt64(6));
 
 	// Duplicate keys throw.
 	EXPECT_FALSE(btree_int_->insert(2, 7));
@@ -195,9 +195,9 @@ TEST_F(BTreeTest, Persistency) {
 		EXPECT_TRUE(btree_int_->insert(1, 2));
 		EXPECT_TRUE(btree_int_->insert(5, 6));
 		EXPECT_TRUE(btree_int_->insert(3, 4));
-		EXPECT_EQ(btree_int_->lookup(3), 4);
-		EXPECT_EQ(btree_int_->lookup(5), 6);
-		EXPECT_EQ(btree_int_->lookup(1), 2);
+		EXPECT_EQ(btree_int_->lookup(3).value(), UInt64(4));
+		EXPECT_EQ(btree_int_->lookup(5).value(), UInt64(6));
+		EXPECT_EQ(btree_int_->lookup(1).value(), UInt64(2));
 	}
 
 	// Destroy B-Tree but persist state on disk.
@@ -205,9 +205,9 @@ TEST_F(BTreeTest, Persistency) {
 
 	{
 		// New B-Tree should pick up previous state.
-		EXPECT_EQ(btree_int_->lookup(3), 4);
-		EXPECT_EQ(btree_int_->lookup(5), 6);
-		EXPECT_EQ(btree_int_->lookup(1), 2);
+		EXPECT_EQ(btree_int_->lookup(3).value(), UInt64(4));
+		EXPECT_EQ(btree_int_->lookup(5).value(), UInt64(6));
+		EXPECT_EQ(btree_int_->lookup(1).value(), UInt64(2));
 	}
 }
 /// A Tree can grow beyond a single node.
@@ -261,9 +261,9 @@ TEST_F(BTreeTest, StringKeys) {
 	EXPECT_TRUE(btree_str_->insert(str2, 2));
 	EXPECT_TRUE(btree_str_->insert(str3, 2));
 
-	EXPECT_EQ(btree_str_->lookup(str1), 1);
-	EXPECT_EQ(btree_str_->lookup(str2), 2);
-	EXPECT_EQ(btree_str_->lookup(str3), 2);
+	EXPECT_EQ(btree_str_->lookup(str1).value(), UInt64(1));
+	EXPECT_EQ(btree_str_->lookup(str2).value(), UInt64(2));
+	EXPECT_EQ(btree_str_->lookup(str3).value(), UInt64(2));
 }
 /// A tree can store variable sized keys.
 TEST_F(BTreeTest, BinaryTree) {

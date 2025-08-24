@@ -135,11 +135,12 @@ restart:
 	}
 
 	auto success = leaf.insert(key, value);
-	buffer_manager.unfix_page(leaf_frame, true);
-
-	if (!success)
+	if (!success) {
+		buffer_manager.unfix_page(leaf_frame, false);
 		return false;
+	}
 
+	buffer_manager.unfix_page(leaf_frame, true);
 	assert(lookup(key).has_value());
 	assert(lookup(key).value() == value);
 
@@ -483,6 +484,10 @@ BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::split(InnerNode &new_node,
 
 	uint16_t pivot_i = (buffer_node->slot_count + 1) / 2 - 1;
 
+	// Cut off at pivot_i.
+	// Compactify node.
+	compactify();
+
 	// First half of slots is reinserted into left leaf to compactiy space.
 	// TODO: Make this better.
 	this->slot_count = 0;
@@ -592,7 +597,7 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::insert(const KeyT &new_pivot,
 		   this->get_data() + this->data_start);
 
 	if constexpr (UseDeltaTree) {
-		slot_target->state = OperationType::Insert;
+		slot_target->state = OperationType::Inserted;
 	}
 
 	return true;
@@ -761,7 +766,7 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::insert(const KeyT &key,
 
 	// Track delta.
 	if constexpr (UseDeltaTree) {
-		slot_target->state = OperationType::Insert;
+		slot_target->state = OperationType::Inserted;
 	}
 
 	return true;
@@ -818,16 +823,16 @@ void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::LeafSlot::print(
 }
 std::ostream &operator<<(std::ostream &os, const OperationType &type) {
 	switch (type) {
-	case OperationType::None:
+	case OperationType::Unchanged:
 		os << "None";
 		break;
-	case OperationType::Insert:
+	case OperationType::Inserted:
 		os << "Insert";
 		break;
-	case OperationType::Delete:
+	case OperationType::Deleted:
 		os << "Delete";
 		break;
-	case OperationType::Update:
+	case OperationType::Updated:
 		os << "Update";
 		break;
 	default:

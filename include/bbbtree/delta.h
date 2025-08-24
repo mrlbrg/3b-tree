@@ -14,6 +14,7 @@ using PID = UInt64;
 /// Forward declarations.
 template <KeyIndexable KeyT, ValueIndexable ValueT> struct Delta;
 template <KeyIndexable KeyT, ValueIndexable ValueT> struct Deltas;
+template <KeyIndexable KeyT, ValueIndexable ValueT> class DeltaTree;
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
 std::ostream &operator<<(std::ostream &os, const Delta<KeyT, ValueT> &type);
@@ -86,6 +87,8 @@ template <KeyIndexable KeyT, ValueIndexable ValueT> struct Deltas {
 	/// Prints the deltas.
 	friend std::ostream &operator<< <>(std::ostream &os,
 									   const Deltas<KeyT, ValueT> &);
+
+	friend DeltaTree<KeyT, ValueT>;
 
   private:
 	/// Returns the number of deltas.

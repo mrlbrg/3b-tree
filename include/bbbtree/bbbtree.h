@@ -29,9 +29,10 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 	/// Scans the given BTree node for dirty entries and buffers them in the
 	/// delta tree.
 	/// TODO: Maybe only pass the frame data instead of the whole frame.
-	bool before_unload(BufferFrame &frame) override;
+	bool before_unload(char *data, const State &state,
+					   PageID page_ide) override;
 	/// Looks up the deltas for the given node and applies them.
-	void after_load(const BufferFrame &frame) override;
+	void after_load(char *data, PageID page_ide) override;
 
   private:
 	/// Cleans the slots of a node of their dirty state. Done to reset the state
@@ -41,6 +42,9 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 	/// Extracts the deltas from the node and stores them in the delta tree.
 	template <typename NodeT, typename DeltasT>
 	DeltasT extract_deltas(const NodeT *node, DeltasT &&deltas);
+	/// Applies the deltas to the node. TODO: Also remove from the tree?
+	template <typename NodeT, typename DeltasT>
+	void apply_deltas(NodeT *node, const DeltasT &deltas);
 
 	/// Calls the correct cleaning codefor the node type.
 	void clean_node(Node *node);

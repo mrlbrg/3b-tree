@@ -28,9 +28,10 @@ class PageLogic {
 	/// The function to call before a dirty page is unloaded.
 	/// Is not called when the page is new.
 	/// Returns true when the unload should proceed to disk.
-	virtual bool before_unload(BufferFrame &frame) = 0;
+	virtual bool before_unload(char *data, const State &state,
+							   PageID page_id) = 0;
 	/// The function to call after the page was loaded from disk.
-	virtual void after_load(const BufferFrame &frame) = 0;
+	virtual void after_load(char *data, PageID page_id) = 0;
 	/// Virtual destructor.
 	virtual ~PageLogic() = default;
 };
@@ -74,7 +75,8 @@ class BufferFrame {
 	inline void set_dirty() {
 		if (state != State::NEW)
 			state = State::DIRTY;
-	} /// Set frame as dirty.
+	}
+	/// Sets frame as clean.
 	inline void set_clean() {
 		assert(is_dirty());
 		state = State::CLEAN;
