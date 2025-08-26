@@ -286,7 +286,8 @@ struct BTree : public Segment {
 				   this->slot_count * sizeof(Pivot);
 		};
 
-		void compactify();
+		/// Moves all keys to the right.
+		void compactify(uint32_t page_size);
 
 	  public:
 		static const constexpr size_t min_space =
@@ -309,7 +310,6 @@ struct BTree : public Segment {
 
 			void print(const std::byte *begin) const;
 
-		  private:
 			/// The number of bytes from end of key to end of entry.
 			uint16_t value_size;
 		};
@@ -374,6 +374,9 @@ struct BTree : public Segment {
 		const LeafSlot *slots_end() const {
 			return slots_begin() + this->slot_count;
 		}
+
+		/// Moves all key-value pairs up to make space on the leaf.f
+		void compactify(uint32_t page_size);
 
 		/// The minimum of space required on a page to store a single entry.
 		static const constexpr size_t min_space =

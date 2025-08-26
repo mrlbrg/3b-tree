@@ -91,7 +91,6 @@ struct SeedableBTree : public BTree<KeyT, ValueT> {
 			// Insert into tree.
 			if (expected_map.count(key) == 0) {
 				bool success = this->insert(key, value);
-				// this->print();
 				assert(success);
 				expected_map[key] = value;
 				assert(expected_map.size() == this->size());
