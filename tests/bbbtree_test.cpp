@@ -1,8 +1,11 @@
 #include "bbbtree/bbbtree.h"
 #include "bbbtree/buffer_manager.h"
+#include "bbbtree/stats.h"
 #include "bbbtree/types.h"
+
 #include <gtest/gtest.h>
 #include <memory>
+#include <random>
 
 using namespace bbbtree;
 
@@ -14,7 +17,7 @@ using DeltaTreeInt = DeltaTree<UInt64, TID>;
 // -----------------------------------------------------------------
 static const constexpr SegmentID TEST_SEGMENT_ID = 834;
 static const constexpr size_t TEST_PAGE_SIZE = 128;
-static const constexpr size_t TEST_NUM_PAGES = 4;
+static const constexpr size_t TEST_NUM_PAGES = 5;
 // -----------------------------------------------------------------
 /// A shared buffer manager for all tests.
 class BBBTreeTest : public ::testing::Test {};
@@ -82,7 +85,8 @@ TEST_F(BBBTreeTest, BufferManagerContinuesUnload) {
 
 	{
 		// Write some initial data to page and write it out.
-		auto &frame = buffer_manager.fix_page(segment_id, page_id, true);
+		auto &frame =
+			buffer_manager.fix_page(segment_id, page_id, true, nullptr);
 		std::memcpy(frame.get_data(), initial_data.data(), TEST_PAGE_SIZE);
 		EXPECT_EQ(std::string_view(frame.get_data(), TEST_PAGE_SIZE),
 				  std::string_view(initial_data.data(), initial_data.size()));
@@ -91,7 +95,8 @@ TEST_F(BBBTreeTest, BufferManagerContinuesUnload) {
 	}
 	{
 		// Test that initial data is still there.
-		auto &frame = buffer_manager.fix_page(segment_id, page_id, true);
+		auto &frame =
+			buffer_manager.fix_page(segment_id, page_id, true, nullptr);
 		EXPECT_EQ(std::string_view(frame.get_data(), TEST_PAGE_SIZE),
 				  std::string_view(initial_data.data(), initial_data.size()));
 		buffer_manager.unfix_page(frame, false);
@@ -133,7 +138,8 @@ TEST_F(BBBTreeTest, BufferManagerStopsUnload) {
 
 	{
 		// Write some initial data to page and write it out.
-		auto &frame = buffer_manager.fix_page(segment_id, page_id, true);
+		auto &frame =
+			buffer_manager.fix_page(segment_id, page_id, true, nullptr);
 		std::memcpy(frame.get_data(), initial_data.data(), TEST_PAGE_SIZE);
 		EXPECT_EQ(std::string_view(frame.get_data(), TEST_PAGE_SIZE),
 				  std::string_view(initial_data.data(), initial_data.size()));
@@ -142,7 +148,8 @@ TEST_F(BBBTreeTest, BufferManagerStopsUnload) {
 	}
 	{
 		// Test that initial data is still there.
-		auto &frame = buffer_manager.fix_page(segment_id, page_id, true);
+		auto &frame =
+			buffer_manager.fix_page(segment_id, page_id, true, nullptr);
 		EXPECT_EQ(std::string_view(frame.get_data(), TEST_PAGE_SIZE),
 				  std::string_view(initial_data.data(), initial_data.size()));
 		buffer_manager.unfix_page(frame, false);
@@ -182,9 +189,10 @@ TEST_F(BBBTreeTest, DeltaTree) {
 	// When the state is new, all slots should be cleaned.
 	// When the state is dirty, all deltas should be stored in the delta tree.
 	// When calling `after_load`, the deltas should be applied to the node.
+	// After applying deltas, the page's state is still clean.
 }
 // -----------------------------------------------------------------
-/// When a node of the BBBTree is evicted, its deltas are stored in the delta
+/// When a leaf of the BBBTree is evicted, its deltas are stored in the delta
 /// tree and not on disk.
 /// TODO: Later only when write amplification was high.
 TEST_F(BBBTreeTest, BufferLeafDeltasInDeltaTree) {
@@ -242,7 +250,64 @@ TEST_F(BBBTreeTest, BufferLeafDeltasInDeltaTree) {
 	buffer_manager.reset();
 	bbbtree_int.reset();
 }
-///
-// TEST_F(BBBTreeTest, LoadNode) {}
+// -----------------------------------------------------------------
+/// Load a node from the disk.
+TEST_F(BBBTreeTest, NodeSplitsInDeltaTree) {
+	size_t page_size = TEST_PAGE_SIZE;
+	std::unique_ptr<BufferManager> buffer_manager =
+		std::make_unique<BufferManager>(page_size, TEST_NUM_PAGES, true);
+	std::unique_ptr<BBBTreeInt> bbbtree_int =
+		std::make_unique<BBBTreeInt>(TEST_SEGMENT_ID, *buffer_manager);
+	std::unordered_map<UInt64, TID> expected_map{};
+
+	size_t tuples_per_leaf = page_size / (sizeof(UInt64) + sizeof(TID) + 12);
+
+	// Fill up the single node.
+	size_t i = 1;
+	for (; i <= tuples_per_leaf; i++) {
+		EXPECT_TRUE(bbbtree_int->insert(i, i + 2));
+		EXPECT_TRUE(bbbtree_int->lookup(i).has_value());
+		EXPECT_EQ(bbbtree_int->lookup(i), i + 2);
+	}
+	// Force node to disk.
+	buffer_manager->clear_all();
+
+	// Split the node.
+	auto node_splits_before = stats.inner_node_splits;
+	EXPECT_TRUE(bbbtree_int->insert(i, i + 2));
+	EXPECT_TRUE(bbbtree_int->lookup(i).has_value());
+	EXPECT_EQ(bbbtree_int->lookup(i), i + 2);
+	auto node_splits_after = stats.inner_node_splits;
+	EXPECT_TRUE(node_splits_before < node_splits_after);
+
+	bbbtree_int->print();
+	buffer_manager->clear_all();
+
+	// Loaded into memory, the BTree is complete because deltas are being
+	// applied.
+	for (size_t j = 1; j <= i; j++) {
+		EXPECT_TRUE(bbbtree_int->insert(j, j + 2));
+		EXPECT_TRUE(bbbtree_int->lookup(j).has_value());
+		EXPECT_EQ(bbbtree_int->lookup(j), j + 2);
+	}
+
+	{
+		// Verify that the left node's changes are not on disk.
+		// Using another btree that has no real page logic to apply on load.
+		TestPageLogic<false> non_applying_page_logic;
+		BTreeInt btree_int{TEST_SEGMENT_ID, *buffer_manager,
+						   &non_applying_page_logic};
+		EXPECT_TRUE(btree_int.lookup(0).has_value());
+		EXPECT_FALSE(btree_int.lookup(1).has_value());
+		buffer_manager->clear_all();
+	}
+	// Check that left node and new root is written out.
+	// Right node is not written out but applied correctly.
+}
+// TODO: When we extract deltas and apply them again, the page remains in clean
+// state. When no changes add on, the page is discarded on eviction and deltas
+// applied at load. When changes add on, we delete the deltas from the tree and
+// add new ones. That means we need to keep the slot state when applying deltas.
+// When we actually write out the page, we clean all slots of tracking state.
 // -----------------------------------------------------------------
 } // namespace

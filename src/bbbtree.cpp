@@ -94,7 +94,8 @@ void DeltaTree<KeyT, ValueT>::store_deltas(PID &&page_id, const Node *node) {
 		deltas = extract_deltas(reinterpret_cast<const InnerNode *>(node),
 								InnerNodeDeltas{});
 
-	auto success = this->insert(std::move(page_id), std::move(deltas));
+	auto success =
+		this->insert(std::move(page_id), {std::move(deltas), node->slot_count});
 
 	if (!success)
 		throw std::logic_error(

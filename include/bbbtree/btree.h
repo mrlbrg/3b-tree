@@ -64,12 +64,13 @@ concept ValueIndexable = Serializable<T> && Testable<T> && Printable<T>;
 template <typename T>
 concept KeyIndexable = ValueIndexable<T> && LowerBoundable<T>;
 // -----------------------------------------------------------------
-/// Types of operations performed on the index.
+/// Describes the operation that was performed on a slot that is not on disk but
+/// lives on memory.
 enum class OperationType : uint8_t {
-	Unchanged = 0, // Default initialized value
-	Inserted = 1,
-	Updated = 2,
-	Deleted = 3
+	Unchanged = 0, // Default initialized value. An entry that is on disk.
+	Inserted = 1,  // An inserted entry that is not on disk yet.
+	Updated = 2,   // An update that is not on disk yet.
+	Deleted = 3	   // A delete that is not on disk yet.
 };
 std::ostream &operator<<(std::ostream &os, const OperationType &type);
 // -----------------------------------------------------------------

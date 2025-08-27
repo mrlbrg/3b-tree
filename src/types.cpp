@@ -11,7 +11,7 @@ std::ostream &operator<<(std::ostream &os, const TID &type) {
 	return os;
 }
 std::ostream &operator<<(std::ostream &os, const String &type) {
-	os << type.view.substr(0, 5);
+	os << type.view;
 	return os;
 }
 } // namespace bbbtree

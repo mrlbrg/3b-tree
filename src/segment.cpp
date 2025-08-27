@@ -9,7 +9,7 @@ FSISegment::FSISegment(SegmentID segment_id, BufferManager &buffer_manager)
 	: Segment(segment_id, buffer_manager) {}
 
 std::optional<PageID> FSISegment::find(uint32_t required_space) {
-	auto &frame = buffer_manager.fix_page(segment_id, 0, false);
+	auto &frame = buffer_manager.fix_page(segment_id, 0, false, nullptr);
 	auto &header = *(reinterpret_cast<FSISegment::Header *>(frame.get_data()));
 
 	// Enough space?
@@ -25,7 +25,7 @@ std::optional<PageID> FSISegment::find(uint32_t required_space) {
 }
 
 void FSISegment::update(PageID target_page, uint32_t new_free_space) {
-	auto &frame = buffer_manager.fix_page(segment_id, 0, true);
+	auto &frame = buffer_manager.fix_page(segment_id, 0, true, nullptr);
 	auto &header = *(reinterpret_cast<FSISegment::Header *>(frame.get_data()));
 
 	if (target_page != (header.allocated_pages - 1)) {
@@ -45,7 +45,7 @@ void FSISegment::update(PageID target_page, uint32_t new_free_space) {
 }
 
 PageID FSISegment::create_new_page(size_t initial_free_space) {
-	auto &frame = buffer_manager.fix_page(segment_id, 0, true);
+	auto &frame = buffer_manager.fix_page(segment_id, 0, true, nullptr);
 	auto &header = *(reinterpret_cast<FSISegment::Header *>(frame.get_data()));
 
 	// TODO: Synchronize this when multi-threading.
@@ -63,7 +63,8 @@ TID SPSegment::allocate(uint32_t size) {
 		auto new_page_id = space_inventory.create_new_page(
 			SlottedPage::get_initial_free_space(buffer_manager.page_size));
 		// Create new Slotted Page
-		auto &frame = buffer_manager.fix_page(segment_id, new_page_id, true);
+		auto &frame =
+			buffer_manager.fix_page(segment_id, new_page_id, true, nullptr);
 		auto &slotted_page = this->get_slotted_page(frame);
 		slotted_page.header = SlottedPage::Header{
 			static_cast<uint32_t>(buffer_manager.page_size)};
@@ -84,7 +85,7 @@ TID SPSegment::allocate(uint32_t size) {
 		space_inventory.find(size + sizeof(SlottedPage::Slot));
 	PageID page_id = optional_page_id.has_value() ? optional_page_id.value()
 												  : create_new_slotted_page();
-	auto &page = buffer_manager.fix_page(segment_id, page_id, true);
+	auto &page = buffer_manager.fix_page(segment_id, page_id, true, nullptr);
 	auto &slotted_page = get_slotted_page(page);
 
 	// Allocate a new slot on that page
@@ -98,7 +99,8 @@ TID SPSegment::allocate(uint32_t size) {
 
 uint32_t SPSegment::read(TID tid, std::byte *record, uint32_t capacity) const {
 	// Get Slot
-	auto &frame = buffer_manager.fix_page(segment_id, tid.get_page_id(), false);
+	auto &frame =
+		buffer_manager.fix_page(segment_id, tid.get_page_id(), false, nullptr);
 	auto &slotted_page = get_slotted_page(frame);
 	auto &slot = *(slotted_page.get_slots() + tid.get_slot_id());
 
@@ -117,7 +119,8 @@ uint32_t SPSegment::read(TID tid, std::byte *record, uint32_t capacity) const {
 uint32_t SPSegment::write(TID tid, const std::byte *record,
 						  uint32_t record_size) {
 	// Get Slot
-	auto &frame = buffer_manager.fix_page(segment_id, tid.get_page_id(), true);
+	auto &frame =
+		buffer_manager.fix_page(segment_id, tid.get_page_id(), true, nullptr);
 	auto &slotted_page = get_slotted_page(frame);
 	auto &slot = *(slotted_page.get_slots() + tid.get_slot_id());
 

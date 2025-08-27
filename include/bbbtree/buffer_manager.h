@@ -120,7 +120,7 @@ class BufferManager {
 	/// If given, page_logic is stored in the frame and called after
 	/// loading/before unloading the page again.
 	BufferFrame &fix_page(SegmentID segment_id, PageID page_id, bool exclusive,
-						  PageLogic *page_logic = nullptr);
+						  PageLogic *page_logic);
 
 	/// Releases a page. If dirty, its written to disk eventually.
 	void unfix_page(BufferFrame &frame, bool is_dirty);
