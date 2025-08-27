@@ -52,7 +52,7 @@ TEST_F(DeltaTest, DeltaSerialization) {
 TEST_F(DeltaTest, DeltasSerialization) {
 	// Empty deltas.
 	{
-		IntDeltas deltas{{}};
+		IntDeltas deltas{{}, 5};
 
 		std::vector<std::byte> buffer(deltas.size());
 		deltas.serialize(buffer.data());
@@ -67,7 +67,7 @@ TEST_F(DeltaTest, DeltasSerialization) {
 		std::vector<IntDelta> values = {{OperationType::Inserted, 42, 1001},
 										{OperationType::Updated, 43, 1002},
 										{OperationType::Deleted, 44, 1003}};
-		IntDeltas deltas{std::move(values)};
+		IntDeltas deltas{std::move(values), 10};
 
 		std::vector<std::byte> buffer(deltas.size());
 		deltas.serialize(buffer.data());
@@ -83,7 +83,7 @@ TEST_F(DeltaTest, DeltasSerialization) {
 			{OperationType::Inserted, {"Hello"}, 1001},
 			{OperationType::Updated, {"World"}, 1002},
 			{OperationType::Deleted, {"!"}, 1003}};
-		StringDeltas deltas{std::move(values)};
+		StringDeltas deltas{std::move(values), 30};
 
 		std::vector<std::byte> buffer(deltas.size());
 		deltas.serialize(buffer.data());
@@ -105,9 +105,9 @@ TEST_F(DeltaTest, DeltaTree) {
 									 {OperationType::Updated, 43, 1002},
 									 {OperationType::Inserted, 46, 1003}};
 
-	IntDeltas expected_deltas1{std::move(values1)};
-	IntDeltas expected_deltas2{std::move(values2)};
-	IntDeltas expected_deltas3{std::move(values3)};
+	IntDeltas expected_deltas1{std::move(values1), 10};
+	IntDeltas expected_deltas2{std::move(values2), 20};
+	IntDeltas expected_deltas3{std::move(values3), 30};
 
 	// Insert some deltas.
 	EXPECT_TRUE(delta_tree.insert(1, expected_deltas1));
@@ -168,7 +168,7 @@ TEST_F(DeltaTest, VariableSizedDeltas) {
 
 			deltas.emplace_back(op, String{keys[i]}, value);
 		}
-		expected_deltas.emplace_back(deltas);
+		expected_deltas.emplace_back(deltas, 30);
 		ASSERT_TRUE(delta_tree.insert(i, expected_deltas.back()));
 	}
 

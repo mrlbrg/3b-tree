@@ -71,13 +71,16 @@ template <KeyIndexable KeyT, ValueIndexable ValueT> struct Deltas {
 
   public:
 	/// Constructor.
-	Deltas(std::variant<LeafDeltas, InnerNodeDeltas> &&deltas);
+	Deltas(std::variant<LeafDeltas, InnerNodeDeltas> &&deltas,
+		   uint16_t slot_count);
 	/// Constuctor with known size.
-	Deltas(std::variant<LeafDeltas, InnerNodeDeltas> &&deltas, uint16_t size);
+	Deltas(std::variant<LeafDeltas, InnerNodeDeltas> &&deltas,
+		   uint16_t slot_count, uint16_t size);
 
 	/// Number of bytes of the serialized object.
 	uint16_t size() const { return cached_size; }
-	/// Serializes this type into bytes to store on pages.
+	/// Serializes this type into bytes to store on pages. The caller must
+	/// ensure that `dst` has enough space for `cached_size`.
 	void serialize(std::byte *dst) const;
 	/// Deserializes the bytes on a page into the type.
 	static Deltas deserialize(const std::byte *src, uint16_t n);
@@ -97,6 +100,8 @@ template <KeyIndexable KeyT, ValueIndexable ValueT> struct Deltas {
 	/// The deltas extracted from BTree nodes. May be from leaf or inner nodes.
 	/// Leaf nodes store keys and values, inner nodes store keys and PIDs.
 	const std::variant<LeafDeltas, InnerNodeDeltas> deltas;
+	/// The number of slots in the node at evict time.
+	uint16_t slot_count;
 
 	/// Cached size of the serialized deltas.
 	uint16_t cached_size;

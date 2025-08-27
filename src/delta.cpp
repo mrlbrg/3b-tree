@@ -1,5 +1,6 @@
 #include "bbbtree/delta.h"
 
+#include <cstdint>
 #include <cstring>
 
 namespace bbbtree {
@@ -65,10 +66,12 @@ std::ostream &operator<<(std::ostream &os, const Delta<KeyT, ValueT> &type) {
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
-Deltas<KeyT, ValueT>::Deltas(std::variant<LeafDeltas, InnerNodeDeltas> &&deltas)
-	: deltas(std::move(deltas)) {
+Deltas<KeyT, ValueT>::Deltas(std::variant<LeafDeltas, InnerNodeDeltas> &&deltas,
+							 uint16_t slot_count)
+	: deltas(std::move(deltas)), slot_count(slot_count) {
 	// Add size of header to serialized size.
 	cached_size = sizeof(num_deltas());
+	cached_size += sizeof(slot_count);
 	// Calculate the size of the deltas.
 	std::visit(
 		[&](auto &&arg) {
@@ -80,8 +83,8 @@ Deltas<KeyT, ValueT>::Deltas(std::variant<LeafDeltas, InnerNodeDeltas> &&deltas)
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
 Deltas<KeyT, ValueT>::Deltas(std::variant<LeafDeltas, InnerNodeDeltas> &&deltas,
-							 uint16_t size)
-	: deltas(std::move(deltas)), cached_size(size) {}
+							 uint16_t slot_count, uint16_t size)
+	: deltas(std::move(deltas)), slot_count(slot_count), cached_size(size) {}
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
 void Deltas<KeyT, ValueT>::serialize(std::byte *dst) const {
@@ -89,6 +92,8 @@ void Deltas<KeyT, ValueT>::serialize(std::byte *dst) const {
 	auto n = num_deltas();
 	std::memcpy(dst, &n, sizeof(n));
 	dst += sizeof(n);
+	std::memcpy(dst, &slot_count, sizeof(slot_count));
+	dst += sizeof(slot_count);
 	// Serialize the deltas.
 	std::visit(
 		[&](auto &&arg) {
@@ -111,6 +116,10 @@ Deltas<KeyT, ValueT> Deltas<KeyT, ValueT>::deserialize(const std::byte *src,
 	uint16_t num_deltas;
 	std::memcpy(&num_deltas, src, sizeof(num_deltas));
 	uint16_t cached_size = sizeof(num_deltas);
+	// Deserialize the slot count on the node.
+	uint16_t slot_count;
+	std::memcpy(&slot_count, src + cached_size, sizeof(slot_count));
+	cached_size += sizeof(slot_count);
 	// Deserialize the deltas.
 	std::visit(
 		[&](auto &&arg) {
@@ -122,7 +131,7 @@ Deltas<KeyT, ValueT> Deltas<KeyT, ValueT>::deserialize(const std::byte *src,
 		},
 		deltas);
 
-	return {std::move(deltas), cached_size};
+	return {std::move(deltas), slot_count, cached_size};
 }
 
 // -----------------------------------------------------------------
