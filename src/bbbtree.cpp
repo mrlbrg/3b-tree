@@ -44,13 +44,15 @@ void DeltaTree<KeyT, ValueT>::after_load(char *data, PageID page_id) {
 	auto deltas = maybe_deltas.value();
 	auto *node = reinterpret_cast<Node *>(data);
 
-	if (node->is_leaf())
+	if (node->is_leaf()) {
 		apply_deltas(reinterpret_cast<LeafNode *>(node),
 					 std::get<LeafDeltas>(deltas.deltas), deltas.slot_count);
-	else
-		apply_deltas(reinterpret_cast<InnerNode *>(node),
-					 std::get<InnerNodeDeltas>(deltas.deltas),
+	} else {
+		auto *inner_node = reinterpret_cast<InnerNode *>(node);
+		apply_deltas(inner_node, std::get<InnerNodeDeltas>(deltas.deltas),
 					 deltas.slot_count);
+		inner_node->upper = deltas.upper;
+	}
 }
 
 // -----------------------------------------------------------------
@@ -71,37 +73,38 @@ void DeltaTree<KeyT, ValueT>::clean_node(Node *node) {
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
 template <typename NodeT, typename DeltasT>
-DeltasT DeltaTree<KeyT, ValueT>::extract_deltas(const NodeT *node,
-												DeltasT &&deltas) {
+void DeltaTree<KeyT, ValueT>::extract_deltas(const NodeT *node,
+											 DeltasT &deltas) {
 	for (const auto *slot = node->slots_begin(); slot < node->slots_end();
 		 ++slot) {
 		if (slot->state == OperationType::Inserted)
 			deltas.emplace_back(slot->state, slot->get_key(node->get_data()),
 								slot->get_value(node->get_data()));
 	}
-
-	return std::move(deltas);
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
 void DeltaTree<KeyT, ValueT>::store_deltas(PID &&page_id, const Node *node) {
 	std::variant<LeafDeltas, InnerNodeDeltas> deltas;
 
-	if (node->is_leaf())
-		deltas = extract_deltas(reinterpret_cast<const LeafNode *>(node),
-								LeafDeltas{});
-	else
-		deltas = extract_deltas(reinterpret_cast<const InnerNode *>(node),
-								InnerNodeDeltas{});
+	bool success = false;
+	if (node->is_leaf()) {
+		LeafDeltas deltas{};
+		auto *leaf = reinterpret_cast<const LeafNode *>(node);
+		extract_deltas(leaf, deltas);
+		success = this->insert(std::move(page_id),
+							   {std::move(deltas), leaf->slot_count});
+	} else {
+		InnerNodeDeltas deltas;
+		auto *inner_node = reinterpret_cast<const InnerNode *>(node);
+		extract_deltas(inner_node, deltas);
+		success = this->insert(
+			std::move(page_id),
+			{std::move(deltas), inner_node->upper, inner_node->slot_count});
+	}
 
-	auto success =
-		this->insert(std::move(page_id), {std::move(deltas), node->slot_count});
-
-	if (!success)
-		throw std::logic_error(
-			"DeltaTree: Failed to insert deltas for PageID " +
-			std::to_string(page_id) +
-			" into delta tree. An entry already exists for this page.");
+	assert(success && "DeltaTree::store_deltas(): Failed to insert deltas "
+					  "into delta tree. Page already has a delta in the tree.");
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>

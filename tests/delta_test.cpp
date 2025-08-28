@@ -64,7 +64,7 @@ TEST_F(DeltaTest, DeltasSerialization) {
 	}
 	// Int deltas.
 	{
-		std::vector<IntDelta> values = {{OperationType::Inserted, 42, 1001},
+		IntDeltas::LeafDeltas values = {{OperationType::Inserted, 42, 1001},
 										{OperationType::Updated, 43, 1002},
 										{OperationType::Deleted, 44, 1003}};
 		IntDeltas deltas{std::move(values), 10};
@@ -74,12 +74,32 @@ TEST_F(DeltaTest, DeltasSerialization) {
 		auto deserialized =
 			IntDeltas::deserialize(buffer.data(), buffer.size());
 
+		EXPECT_TRUE(deltas.is_leaf());
+		EXPECT_TRUE(deserialized.is_leaf());
+		EXPECT_EQ(deltas.size(), deserialized.size());
+		EXPECT_EQ(deltas, deserialized);
+	}
+	// Inner Node deltas.
+	{
+		IntDeltas::InnerNodeDeltas values = {
+			{OperationType::Inserted, 42, 1001},
+			{OperationType::Updated, 43, 1002},
+			{OperationType::Deleted, 44, 1003}};
+		IntDeltas deltas{std::move(values), 4534, 10};
+
+		std::vector<std::byte> buffer(deltas.size());
+		deltas.serialize(buffer.data());
+		auto deserialized =
+			IntDeltas::deserialize(buffer.data(), buffer.size());
+
+		EXPECT_TRUE(!deltas.is_leaf());
+		EXPECT_TRUE(!deserialized.is_leaf());
 		EXPECT_EQ(deltas.size(), deserialized.size());
 		EXPECT_EQ(deltas, deserialized);
 	}
 	// String deltas.
 	{
-		std::vector<StringDelta> values = {
+		StringDeltas::LeafDeltas values = {
 			{OperationType::Inserted, {"Hello"}, 1001},
 			{OperationType::Updated, {"World"}, 1002},
 			{OperationType::Deleted, {"!"}, 1003}};
@@ -158,7 +178,7 @@ TEST_F(DeltaTest, VariableSizedDeltas) {
 
 	// Generate random StringDeltas and insert into tree
 	for (size_t i = 0; i < NUM_TREE_ENTRIES; ++i) {
-		std::vector<StringDelta> deltas;
+		StringDeltas::LeafDeltas deltas;
 		size_t num_deltas = 1 + rng() % (NUM_DELTAS / NUM_TREE_ENTRIES);
 
 		for (size_t j = 0; j < num_deltas; ++j) {
@@ -168,7 +188,7 @@ TEST_F(DeltaTest, VariableSizedDeltas) {
 
 			deltas.emplace_back(op, String{keys[i]}, value);
 		}
-		expected_deltas.emplace_back(deltas, 30);
+		expected_deltas.emplace_back(std::move(deltas), 30);
 		ASSERT_TRUE(delta_tree.insert(i, expected_deltas.back()));
 	}
 

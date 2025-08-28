@@ -258,11 +258,13 @@ TEST_F(BBBTreeTest, LeafSplitsInDeltaTree) {
 	std::unique_ptr<BBBTreeInt> bbbtree_int =
 		std::make_unique<BBBTreeInt>(TEST_SEGMENT_ID, *buffer_manager);
 
-	size_t tuples_per_leaf = page_size / (sizeof(UInt64) + sizeof(TID) + 12);
+	const size_t tuples_per_leaf =
+		(page_size - sizeof(BTreeInt::LeafNode)) /
+		(sizeof(UInt64) + sizeof(TID) + sizeof(BTreeInt::LeafNode::Slot));
 
 	// Fill up the single node.
 	size_t i = 1;
-	for (; i <= tuples_per_leaf; i++) {
+	for (; i < tuples_per_leaf; i++) {
 		EXPECT_TRUE(bbbtree_int->insert(i, i + 2));
 		EXPECT_TRUE(bbbtree_int->lookup(i).has_value());
 		EXPECT_EQ(bbbtree_int->lookup(i), i + 2);
@@ -272,16 +274,17 @@ TEST_F(BBBTreeTest, LeafSplitsInDeltaTree) {
 
 	// Split the node.
 	auto node_splits_before = stats.leaf_node_splits;
-	EXPECT_TRUE(bbbtree_int->insert(i, i + 2));
-	EXPECT_TRUE(bbbtree_int->lookup(i).has_value());
-	EXPECT_EQ(bbbtree_int->lookup(i), i + 2);
-	auto node_splits_after = stats.leaf_node_splits;
-	EXPECT_TRUE(node_splits_before < node_splits_after);
+	while (stats.leaf_node_splits == node_splits_before) {
+		EXPECT_TRUE(bbbtree_int->insert(i, i + 2));
+		EXPECT_TRUE(bbbtree_int->lookup(i).has_value());
+		EXPECT_EQ(bbbtree_int->lookup(i), i + 2);
+		++i;
+	}
 	buffer_manager->clear_all();
 
 	// Loaded into memory, the BTree is complete because deltas are being
 	// applied.
-	for (size_t j = 1; j <= i; j++) {
+	for (size_t j = 1; j < i; j++) {
 		EXPECT_TRUE(bbbtree_int->lookup(j).has_value());
 		EXPECT_EQ(bbbtree_int->lookup(j), j + 2);
 	}
@@ -316,7 +319,6 @@ TEST_F(BBBTreeTest, LeafSplitsInDeltaTree) {
 // -----------------------------------------------------------------
 // Inserts following a split are handled by the delta tree.
 TEST_F(BBBTreeTest, SplitAndInserts) {
-
 	class TestBBBTree : public BBBTreeInt {
 	  public:
 		TestBBBTree(SegmentID segment_id, BufferManager &buffer_manager)
@@ -331,11 +333,13 @@ TEST_F(BBBTreeTest, SplitAndInserts) {
 	std::unique_ptr<TestBBBTree> bbbtree_int =
 		std::make_unique<TestBBBTree>(TEST_SEGMENT_ID, *buffer_manager);
 
-	size_t tuples_per_leaf = page_size / (sizeof(UInt64) + sizeof(TID) + 12);
+	size_t tuples_per_leaf =
+		(page_size - sizeof(BTreeInt::LeafNode)) /
+		(sizeof(UInt64) + sizeof(TID) + sizeof(BTreeInt::LeafNode::Slot));
 
 	// Fill up the single node.
 	size_t i = 1;
-	for (; i <= tuples_per_leaf; i++) {
+	for (; i < tuples_per_leaf; i++) {
 		EXPECT_TRUE(bbbtree_int->insert(i, i + 2));
 		EXPECT_TRUE(bbbtree_int->lookup(i).has_value());
 		EXPECT_EQ(bbbtree_int->lookup(i), i + 2);
@@ -345,11 +349,12 @@ TEST_F(BBBTreeTest, SplitAndInserts) {
 
 	// Split the node.
 	auto node_splits_before = stats.leaf_node_splits;
-	EXPECT_TRUE(bbbtree_int->insert(i, i + 2));
-	EXPECT_TRUE(bbbtree_int->lookup(i).has_value());
-	EXPECT_EQ(bbbtree_int->lookup(i), i + 2);
-	auto node_splits_after = stats.leaf_node_splits;
-	EXPECT_TRUE(node_splits_before < node_splits_after);
+	while (stats.leaf_node_splits == node_splits_before) {
+		EXPECT_TRUE(bbbtree_int->insert(i, i + 2));
+		EXPECT_TRUE(bbbtree_int->lookup(i).has_value());
+		EXPECT_EQ(bbbtree_int->lookup(i), i + 2);
+		++i;
+	}
 
 	// Insert into the left node again.
 	EXPECT_TRUE(bbbtree_int->insert(0, 2));
@@ -396,13 +401,74 @@ TEST_F(BBBTreeTest, SplitAndInserts) {
 	}
 }
 // -----------------------------------------------------------------
-// TODO: `insert_split` in an inner node is extracted and applied correctly.
-TEST_F(BBBTreeTest, InnerNodeInsertInDeltaTree) {}
-// TODO: When we extract deltas and apply them again, the page remains in clean
-// state. When no changes add on, the page is discarded on eviction and deltas
-// applied at load. When changes add on, we delete the deltas from the tree and
-// add new ones. That means we need to keep the slot state when applying deltas.
-// When we actually write out the page, we clean all slots of tracking state.
-TEST_F(BBBTreeTest, NodeInDeltaTreeBecomesDirtier) {}
+// An insert of a new slot and an update to upper is extracted and applied
+// correctly.
+TEST_F(BBBTreeTest, InnerNodeInsert) {
+	class TestBBBTree : public BBBTreeInt {
+	  public:
+		TestBBBTree(SegmentID segment_id, BufferManager &buffer_manager)
+			: BBBTreeInt(segment_id, buffer_manager) {}
+
+		DeltaTreeInt *get_delta_tree() { return &(this->delta_tree); }
+
+		BTreeInt *get_btree() { return &this->btree; }
+	};
+
+	size_t page_size = TEST_PAGE_SIZE;
+	std::unique_ptr<BufferManager> buffer_manager =
+		std::make_unique<BufferManager>(page_size, TEST_NUM_PAGES, true);
+	std::unique_ptr<TestBBBTree> bbbtree_int =
+		std::make_unique<TestBBBTree>(TEST_SEGMENT_ID, *buffer_manager);
+
+	// Create a tree of three nodes and write all out.
+	size_t i = 0;
+	auto node_splits_before = stats.leaf_node_splits;
+	while (stats.leaf_node_splits == node_splits_before) {
+		EXPECT_TRUE(bbbtree_int->insert(i, i + 2));
+		EXPECT_TRUE(bbbtree_int->lookup(i).has_value());
+		EXPECT_EQ(bbbtree_int->lookup(i), i + 2);
+		++i;
+	}
+	EXPECT_EQ(bbbtree_int->get_btree()->height(), size_t(2));
+	buffer_manager->clear_all();
+
+	// Force another split.
+	node_splits_before = stats.leaf_node_splits;
+	while (stats.leaf_node_splits == node_splits_before) {
+		EXPECT_TRUE(bbbtree_int->insert(i, i + 2));
+		EXPECT_TRUE(bbbtree_int->lookup(i).has_value());
+		EXPECT_EQ(bbbtree_int->lookup(i), i + 2);
+		++i;
+	}
+	buffer_manager->clear_all();
+
+	// In memory, all keys are found.
+	for (size_t j = 0; j < i; ++j) {
+		EXPECT_TRUE(bbbtree_int->lookup(j).has_value());
+		EXPECT_EQ(bbbtree_int->lookup(j), j + 2);
+	}
+	buffer_manager->clear_all();
+
+	// TODO: Inspect the disk state. The root does not have the newly inserted
+	// split on disk. and the upper is outdated.
+}
 // -----------------------------------------------------------------
+// A split child results in an insert of a new slot in the parent and an update
+// of the split slot in the parent (if not the upper child was split). Those
+// must be tracked correctly.
+TEST_F(BBBTreeTest, InnerNodeUpdate) {}
+// -----------------------------------------------------------------
+// Deltas are applied repeatedly when a page is loaded repeatedly. The page
+// remains in clean state.
+TEST_F(BBBTreeTest, RepeatedLoading) {}
+// -----------------------------------------------------------------
+// When a page becomes dirtier than the deltas in the delta tree, the delta tree
+// is extended by those new deltas. I.e. an applied delta marks the state of the
+// slots in memory accordingly. Alternatively, we simply extend the deltas
+// vector.
+TEST_F(BBBTreeTest, NodesBecomeDirtier) {}
+// ----------------------------------------------------------------
+// A node is cleaned of all its slot states when actually being written out.
+TEST_F(BBBTreeTest, PageIsActuallyWrittenOut) {}
+// ----------------------------------------------------------------
 } // namespace

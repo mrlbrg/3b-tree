@@ -69,8 +69,9 @@ concept KeyIndexable = ValueIndexable<T> && LowerBoundable<T>;
 enum class OperationType : uint8_t {
 	Unchanged = 0, // Default initialized value. An entry that is on disk.
 	Inserted = 1,  // An inserted entry that is not on disk yet.
-	Updated = 2,   // An update that is not on disk yet.
-	Deleted = 3	   // A delete that is not on disk yet.
+	Updated =
+		2, // An updated value that is not on disk yet. Keys do not change atm.
+	Deleted = 3 // A delete that is not on disk yet.
 };
 std::ostream &operator<<(std::ostream &os, const OperationType &type);
 // -----------------------------------------------------------------
@@ -224,14 +225,12 @@ struct BTree : public Segment {
 		/// have a dangling reference.
 		const KeyT split(InnerNode &new_node, size_t page_size);
 
-		/// Inserts a new pivot/child pair resulting from a split.
+		/// Inserts a new pivot/child pair resulting from a split of a child.
 		/// `new_child` is the new node created during the split. Replaces the
 		/// pointer for the old pivot of the page. The old page becomes the
 		/// child for the new key `new_pivot`. Pivot must be unique. Must have
-		/// enough space. Returns true if key was inserted successfully. False
-		/// otherwise.
-		[[nodiscard]] bool insert_split(const KeyT &new_pivot,
-										PageID new_child);
+		/// enough space.
+		void insert_split(const KeyT &new_pivot, PageID new_child);
 
 		/// Returns all children of this node.
 		std::vector<PageID> get_children();
@@ -268,8 +267,9 @@ struct BTree : public Segment {
 		/// Caller then must usually handle the `upper` of the node.
 		Pivot *lower_bound(const KeyT &pivot);
 
-		/// Insert a new slot. Returns false if key alredy exists. Caller must
-		/// ensure that there is enough space. Otherwise its undefined behavior.
+		/// Insert a new slot. Used on the new node when splitting an inner
+		/// node. Returns false if key alredy exists. Caller must ensure that
+		/// there is enough space. Otherwise its undefined behavior.
 		[[nodiscard]] bool insert(const KeyT &pivot, PageID child);
 
 		/// Get begin of slots section.

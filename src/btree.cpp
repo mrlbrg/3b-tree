@@ -204,6 +204,7 @@ void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 		const auto new_pid = get_new_page();
 		auto *new_leaf_frame =
 			&buffer_manager.fix_page(segment_id, new_pid, true, page_logic);
+		assert(new_leaf_frame->is_new());
 		auto *new_leaf = (new (new_leaf_frame->get_data())
 							  LeafNode(buffer_manager.page_size));
 		const auto pivot =
@@ -234,6 +235,7 @@ void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 
 				auto *root_frame = &buffer_manager.fix_page(segment_id, root,
 															true, page_logic);
+				assert(root_frame->is_new());
 				new (root_frame->get_data())
 					InnerNode(buffer_manager.page_size, ++max_level, old_root);
 				root_frame->set_dirty();
@@ -253,6 +255,7 @@ void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 				const auto new_pid = get_new_page();
 				auto *new_frame = &buffer_manager.fix_page(segment_id, new_pid,
 														   true, page_logic);
+				assert(new_frame->is_new());
 				auto *new_node = (new (new_frame->get_data()) InnerNode(
 					buffer_manager.page_size, curr_node->level,
 					curr_node->get_upper()));
@@ -274,14 +277,7 @@ void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 			}
 
 			// Moving down.
-			bool success = curr_node->insert_split(curr_key, curr_pid);
-			if (!success) {
-				for (auto *frame : locked_nodes)
-					// Don't mark dirty here. Done while splitting.
-					buffer_manager.unfix_page(*frame, false);
-				throw std::logic_error(
-					"InnerNode::insert_split(): Insert did not succeed.");
-			}
+			curr_node->insert_split(curr_key, curr_pid);
 			curr_frame->set_dirty();
 			insertion_queue.pop_back();
 			assert(curr_level > 0);
@@ -528,28 +524,30 @@ BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::split(InnerNode &new_node,
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
-bool BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::insert_split(
+void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::insert_split(
 	const KeyT &new_pivot, PageID new_child) {
 	// Sanity checks.
 	assert(has_space(new_pivot, new_child));
 	assert(upper);
 
+	// Find the slot of the child that was split.
 	auto *slot_target = lower_bound(new_pivot);
 	PageID old_child;
 	if (slot_target == slots_end()) {
-		// Target slot is rightmost `upper`.
+		// Upper child was split.
 		old_child = upper;
 		upper = new_child;
-		// Insert slot with <new_pivot, old_upper>
 	} else {
-		const auto found_pivot = slot_target->get_key(this->get_data());
-		// Keys must be unique. We don't throw here because we don't manage
-		// the lock.
-		if (found_pivot == new_pivot)
-			return false;
-
+		assert(slot_target->get_key(this->get_data()) != new_pivot);
 		old_child = slot_target->child;
 		slot_target->child = new_child;
+
+		if constexpr (UseDeltaTree) {
+			// Indicate that the child has changed from the disk state. Unless
+			// it was newly inserted since loaded from disk.
+			if (slot_target->state != OperationType::Inserted)
+				slot_target->state = OperationType::Updated;
+		}
 	}
 
 	// Move each slot up by one to make space for new one.
@@ -558,15 +556,13 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::insert_split(
 		auto &target_slot = *(slot);
 		target_slot = source_slot;
 	}
-	// Insert new slot.
+	// Insert slot with <new_pivot, old_upper>
 	this->data_start -= new_pivot.size();
 	++this->slot_count;
 	*slot_target =
 		Pivot{this->get_data(), this->data_start, new_pivot, old_child};
 	assert(reinterpret_cast<std::byte *>(slots_end()) <=
 		   this->get_data() + this->data_start);
-
-	return true;
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
@@ -577,21 +573,25 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::insert(const KeyT &new_pivot,
 	assert(upper);
 
 	// Find target position for new pivotal slot.
-	auto *slot_target = lower_bound(new_pivot);
-	if (slot_target != slots_end()) {
-		const auto found_pivot = slot_target->get_key(this->get_data());
-		// Keys must be unique. We don't throw here because we don't manage
-		// the lock.
-		if (found_pivot == new_pivot)
-			return false;
-	}
+	// Must always be the end because we only use this method to insert already
+	// ordered slots from a splitting sibling node.
+	assert(lower_bound(new_pivot) == slots_end());
+	auto *slot_target = slots_end();
+	// auto *slot_target = lower_bound(new_pivot);
+	// if (slot_target != slots_end()) {
+	// 	const auto found_pivot = slot_target->get_key(this->get_data());
+	// 	// Keys must be unique. We don't throw here because we don't manage
+	// 	// the lock.
+	// 	if (found_pivot == new_pivot)
+	// 		return false;
+	// }
 
 	// Move each slot up by one to make space for new one.
-	for (auto *slot = slots_end(); slot > slot_target; --slot) {
-		auto &source_slot = *(slot - 1);
-		auto &target_slot = *(slot);
-		target_slot = source_slot;
-	}
+	// for (auto *slot = slots_end(); slot > slot_target; --slot) {
+	// 	auto &source_slot = *(slot - 1);
+	// 	auto &target_slot = *(slot);
+	// 	target_slot = source_slot;
+	// }
 	// Insert new slot.
 	this->data_start -= new_pivot.size();
 	++this->slot_count;
@@ -600,9 +600,9 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::insert(const KeyT &new_pivot,
 	assert(reinterpret_cast<std::byte *>(slots_end()) <=
 		   this->get_data() + this->data_start);
 
-	if constexpr (UseDeltaTree) {
-		slot_target->state = OperationType::Inserted;
-	}
+	// if constexpr (UseDeltaTree) {
+	// 	slot_target->state = OperationType::Inserted;
+	// }
 
 	return true;
 }
@@ -639,6 +639,9 @@ BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::Pivot::Pivot(
 	// Store key at offset. Caller must ensure that it has enough space for
 	// `key.size()`.
 	key.serialize(page_begin + offset);
+	if constexpr (UseDeltaTree) {
+		this->state = OperationType::Inserted;
+	}
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>

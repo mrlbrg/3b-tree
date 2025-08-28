@@ -66,12 +66,12 @@ std::ostream &operator<<(std::ostream &os, const Delta<KeyT, ValueT> &type) {
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
-Deltas<KeyT, ValueT>::Deltas(std::variant<LeafDeltas, InnerNodeDeltas> &&deltas,
-							 uint16_t slot_count)
+Deltas<KeyT, ValueT>::Deltas(LeafDeltas &&deltas, uint16_t slot_count)
 	: deltas(std::move(deltas)), slot_count(slot_count) {
 	// Add size of header to serialized size.
 	cached_size = sizeof(num_deltas());
 	cached_size += sizeof(slot_count);
+	cached_size += sizeof(bool); // is_leaf marker
 	// Calculate the size of the deltas.
 	std::visit(
 		[&](auto &&arg) {
@@ -82,9 +82,34 @@ Deltas<KeyT, ValueT>::Deltas(std::variant<LeafDeltas, InnerNodeDeltas> &&deltas,
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
-Deltas<KeyT, ValueT>::Deltas(std::variant<LeafDeltas, InnerNodeDeltas> &&deltas,
-							 uint16_t slot_count, uint16_t size)
+Deltas<KeyT, ValueT>::Deltas(LeafDeltas &&deltas, uint16_t slot_count,
+							 uint16_t size)
 	: deltas(std::move(deltas)), slot_count(slot_count), cached_size(size) {}
+
+// -----------------------------------------------------------------
+template <KeyIndexable KeyT, ValueIndexable ValueT>
+Deltas<KeyT, ValueT>::Deltas(InnerNodeDeltas &&deltas, PageID upper,
+							 uint16_t slot_count)
+	: deltas(std::move(deltas)), upper(upper), slot_count(slot_count) {
+	// Add size of header to serialized size.
+	cached_size = sizeof(num_deltas());
+	cached_size += sizeof(upper);
+	cached_size += sizeof(slot_count);
+	cached_size += sizeof(bool); // is_leaf marker
+	// Calculate the size of the deltas.
+	std::visit(
+		[&](auto &&arg) {
+			for (const auto &delta : arg)
+				cached_size += delta.size();
+		},
+		this->deltas);
+}
+// -----------------------------------------------------------------
+template <KeyIndexable KeyT, ValueIndexable ValueT>
+Deltas<KeyT, ValueT>::Deltas(InnerNodeDeltas &&deltas, PageID upper,
+							 uint16_t slot_count, uint16_t size)
+	: deltas(std::move(deltas)), upper(upper), slot_count(slot_count),
+	  cached_size(size) {}
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
 void Deltas<KeyT, ValueT>::serialize(std::byte *dst) const {
@@ -92,8 +117,18 @@ void Deltas<KeyT, ValueT>::serialize(std::byte *dst) const {
 	auto n = num_deltas();
 	std::memcpy(dst, &n, sizeof(n));
 	dst += sizeof(n);
+	// Serialize the slot count.
 	std::memcpy(dst, &slot_count, sizeof(slot_count));
 	dst += sizeof(slot_count);
+	// Serialize leaf/inner node marker.
+	bool is_leaf = std::holds_alternative<LeafDeltas>(deltas);
+	std::memcpy(dst, &is_leaf, sizeof(is_leaf));
+	dst += sizeof(is_leaf);
+	// Serialize upper for inner nodes.
+	if (!is_leaf) {
+		std::memcpy(dst, &upper, sizeof(upper));
+		dst += sizeof(upper);
+	}
 	// Serialize the deltas.
 	std::visit(
 		[&](auto &&arg) {
@@ -111,7 +146,6 @@ Deltas<KeyT, ValueT> Deltas<KeyT, ValueT>::deserialize(const std::byte *src,
 	// TODO: We deserialize LeafDeltas here. Serialize a bool to indicate if
 	// this is a leaf or inner node's deltas.
 	assert(n >= sizeof(uint16_t));
-	std::variant<LeafDeltas, InnerNodeDeltas> deltas;
 	// Deserialize the number of deltas.
 	uint16_t num_deltas;
 	std::memcpy(&num_deltas, src, sizeof(num_deltas));
@@ -120,18 +154,35 @@ Deltas<KeyT, ValueT> Deltas<KeyT, ValueT>::deserialize(const std::byte *src,
 	uint16_t slot_count;
 	std::memcpy(&slot_count, src + cached_size, sizeof(slot_count));
 	cached_size += sizeof(slot_count);
-	// Deserialize the deltas.
-	std::visit(
-		[&](auto &&arg) {
-			arg.resize(num_deltas);
-			for (auto &delta : arg) {
-				delta.deserialize(src + cached_size);
-				cached_size += delta.size();
-			}
-		},
-		deltas);
+	// Deserialize the leaf/inner node marker.
+	bool is_leaf;
+	std::memcpy(&is_leaf, src + cached_size, sizeof(is_leaf));
+	cached_size += sizeof(is_leaf);
+	if (is_leaf) {
+		// Deserialize the deltas.
+		LeafDeltas deltas{};
+		deltas.resize(num_deltas);
+		for (auto &delta : deltas) {
+			delta.deserialize(src + cached_size);
+			cached_size += delta.size();
+		}
+		return {std::move(deltas), slot_count, cached_size};
 
-	return {std::move(deltas), slot_count, cached_size};
+	} else {
+		// Deserialize upper.
+		// TODO: Don't always store `upper`. Only when it's actually updated.
+		PageID upper;
+		std::memcpy(&upper, src + cached_size, sizeof(upper));
+		cached_size += sizeof(upper);
+		// Deserialize the deltas.
+		InnerNodeDeltas deltas{};
+		deltas.resize(num_deltas);
+		for (auto &delta : deltas) {
+			delta.deserialize(src + cached_size);
+			cached_size += delta.size();
+		}
+		return {std::move(deltas), upper, slot_count, cached_size};
+	}
 }
 
 // -----------------------------------------------------------------
@@ -147,7 +198,9 @@ uint16_t Deltas<KeyT, ValueT>::num_deltas() const {
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
 std::ostream &operator<<(std::ostream &os, const Deltas<KeyT, ValueT> &type) {
-	os << " Deltas: (slot_count: " << type.slot_count << ", [";
+	os << " Deltas: (slot_count: " << type.slot_count
+	   << ", upper: " << type.upper;
+	os << "[";
 	std::visit(
 		[&](auto &&arg) {
 			for (const auto &delta : arg) {

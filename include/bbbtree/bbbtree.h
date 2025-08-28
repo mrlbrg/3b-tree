@@ -41,9 +41,9 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 	/// of a node when we want to actually write it out. The delta tracking
 	/// should only be kept in memory.
 	template <typename NodeT> void clean_node(NodeT *node);
-	/// Extracts the deltas from the node and stores them in the delta tree.
+	/// Extracts the deltas from the node.
 	template <typename NodeT, typename DeltasT>
-	DeltasT extract_deltas(const NodeT *node, DeltasT &&deltas);
+	void extract_deltas(const NodeT *node, DeltasT &deltas);
 	/// Applies the deltas to the node. TODO: Also remove from the tree?
 	template <typename NodeT, typename DeltasT>
 	void apply_deltas(NodeT *node, const DeltasT &deltas, uint16_t slot_count);
