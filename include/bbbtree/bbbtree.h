@@ -4,6 +4,8 @@
 #include "bbbtree/buffer_manager.h"
 #include "bbbtree/delta.h"
 #include "bbbtree/types.h"
+#include <cstdint>
+#include <sys/types.h>
 
 namespace bbbtree {
 // -----------------------------------------------------------------
@@ -44,7 +46,7 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 	DeltasT extract_deltas(const NodeT *node, DeltasT &&deltas);
 	/// Applies the deltas to the node. TODO: Also remove from the tree?
 	template <typename NodeT, typename DeltasT>
-	void apply_deltas(NodeT *node, const DeltasT &deltas);
+	void apply_deltas(NodeT *node, const DeltasT &deltas, uint16_t slot_count);
 
 	/// Calls the correct cleaning codefor the node type.
 	void clean_node(Node *node);
@@ -76,7 +78,7 @@ template <KeyIndexable KeyT, ValueIndexable ValueT> class BBBTree {
 	/// Print tree and its delta tree. Not thread-safe.
 	void print();
 
-  private:
+  protected:
 	/// The delta tree that stores changes to entries of the `btree` nodes,
 	/// identified through their PID.
 	DeltaTree<KeyT, ValueT> delta_tree;

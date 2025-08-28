@@ -1,5 +1,7 @@
 #include "bbbtree/bbbtree.h"
 #include "bbbtree/buffer_manager.h"
+#include <cstdint>
+#include <cstring>
 #include <string>
 
 namespace bbbtree {
@@ -9,7 +11,9 @@ bool DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
 											PageID page_id) {
 	// TODO: When we return true to continue to write out because
 	// write amplification is low,
-	// we must clean the slots of their dirty state here.
+	// we must clean the slots of their dirty state too.
+	// TODO: When the page is actually written out, we need to remove it from
+	// the delta tree.
 
 	// Clean the slots of their dirty state when writing the node out.
 	if (state == State::NEW) {
@@ -39,16 +43,14 @@ void DeltaTree<KeyT, ValueT>::after_load(char *data, PageID page_id) {
 	// Apply the deltas to the node.
 	auto deltas = maybe_deltas.value();
 	auto *node = reinterpret_cast<Node *>(data);
-	assert(deltas.num_deltas() > 0);
 
 	if (node->is_leaf())
 		apply_deltas(reinterpret_cast<LeafNode *>(node),
-					 std::get<LeafDeltas>(deltas.deltas));
+					 std::get<LeafDeltas>(deltas.deltas), deltas.slot_count);
 	else
 		apply_deltas(reinterpret_cast<InnerNode *>(node),
-					 std::get<InnerNodeDeltas>(deltas.deltas));
-
-	// Remove the page from the delta tree.
+					 std::get<InnerNodeDeltas>(deltas.deltas),
+					 deltas.slot_count);
 }
 
 // -----------------------------------------------------------------
@@ -78,8 +80,6 @@ DeltasT DeltaTree<KeyT, ValueT>::extract_deltas(const NodeT *node,
 								slot->get_value(node->get_data()));
 	}
 
-	assert(deltas.empty() == false);
-
 	return std::move(deltas);
 }
 // -----------------------------------------------------------------
@@ -106,20 +106,67 @@ void DeltaTree<KeyT, ValueT>::store_deltas(PID &&page_id, const Node *node) {
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
 template <typename NodeT, typename DeltasT>
-void DeltaTree<KeyT, ValueT>::apply_deltas(NodeT *node, const DeltasT &deltas) {
-	for (auto &[entry, op_type] : deltas) {
+void DeltaTree<KeyT, ValueT>::apply_deltas(NodeT *node, const DeltasT &deltas,
+										   uint16_t slot_count) {
+	auto apply_delta = [](const auto &delta, NodeT *node) {
+		auto &[entry, op_type] = delta;
 		auto &[key, value] = entry;
 		if (op_type == OperationType::Inserted) {
 			auto success = node->insert(key, value);
 			if (!success)
-				throw std::logic_error(
-					"DeltaTree::after_load(): Failed to apply delta to node. "
-					"Key already exists.");
-			continue;
+				throw std::logic_error("DeltaTree::after_load(): "
+									   "Failed to apply delta to "
+									   "node. Key already exists.");
+		} else {
+			throw std::logic_error("DeltaTree::after_load(): "
+								   "Operation Type not implemented "
+								   "yet.");
 		}
-		throw std::logic_error("DeltaTree::after_load(): Operation "
-							   "Type not implemented yet.");
+	};
+
+	auto out_of_place_apply = [&](const size_t page_size, size_t deltas_i) {
+		// Get the space we need temporarily.
+		size_t insert_size = 0;
+		for (auto i = deltas_i; i < deltas.size(); ++i) {
+			auto &[entry, op_type] = deltas[i];
+			auto &[key, value] = entry;
+			insert_size += node->required_space(key, value);
+		}
+		// Create a buffer for the new node.
+		std::vector<std::byte> buffer{page_size + insert_size};
+		std::memcpy(buffer.data(), node->get_data(), buffer.size());
+		auto *buffered_node = reinterpret_cast<NodeT *>(buffer.data());
+		// Make space for insert deltas.
+		buffered_node->compactify(buffer.size());
+		// Insert deltas.
+		for (auto i = deltas_i; i < deltas.size(); ++i)
+			apply_delta(deltas[i], buffered_node);
+		// Cut off all split slots.
+		buffered_node->slot_count = slot_count;
+		buffered_node->compactify(buffer.size());
+		// Shrink node to original size.
+		buffered_node->shrink(buffer.size(), page_size);
+		// Copy back to original node.
+		std::memcpy(node, buffered_node, page_size);
+	};
+
+	// Sanity Check: There must have been either inserts or node splits.
+	assert(!deltas.empty() || node->slot_count != slot_count);
+
+	// Insert deltas into the node.
+	for (size_t i = 0; i < deltas.size(); ++i) {
+		auto &[entry, op] = deltas[i];
+		if (node->has_space(entry.key, entry.value)) {
+			apply_delta(deltas[i], node);
+		} else {
+			// No space left. Apply the rest of the deltas out-of-place.
+			out_of_place_apply(this->buffer_manager.page_size, i);
+			return;
+		}
 	}
+
+	// Cut off the slots that were split.
+	node->slot_count = slot_count;
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>

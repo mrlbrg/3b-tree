@@ -199,10 +199,16 @@ struct BTree : public Segment {
 		/// Constructor. Used when needing a new node for a node split.
 		InnerNode(uint32_t page_size, uint16_t level, PageID upper);
 
+		/// The number of bytes required on the page to insert the given
+		/// key/value pair.
+		size_t required_space(const KeyT &pivot,
+							  const PageID & /*child*/) const {
+			return (pivot.size() + sizeof(Pivot));
+		}
 		/// Returns true if this leaf has enough space for the given key/value
 		/// pair.
-		bool has_space(const KeyT &pivot) const {
-			return get_free_space() >= (pivot.size() + sizeof(Pivot));
+		bool has_space(const KeyT &pivot, const PageID &child) const {
+			return get_free_space() >= required_space(pivot, child);
 		}
 
 		/// Returns the appropriate child pointer for a given pivot.
@@ -219,8 +225,11 @@ struct BTree : public Segment {
 		const KeyT split(InnerNode &new_node, size_t page_size);
 
 		/// Inserts a new pivot/child pair resulting from a split.
-		/// Pivot must be unique. Must have enough space.
-		/// Returns true if key was inserted successfully. False otherwise.
+		/// `new_child` is the new node created during the split. Replaces the
+		/// pointer for the old pivot of the page. The old page becomes the
+		/// child for the new key `new_pivot`. Pivot must be unique. Must have
+		/// enough space. Returns true if key was inserted successfully. False
+		/// otherwise.
 		[[nodiscard]] bool insert_split(const KeyT &new_pivot,
 										PageID new_child);
 
@@ -289,6 +298,9 @@ struct BTree : public Segment {
 
 		/// Moves all keys to the right.
 		void compactify(uint32_t page_size);
+		/// Reduces the size of the node. `target_page_size` must be smaller
+		/// than `current_page_size`. All entries must fit `target_page_size`.
+		void shrink(uint32_t current_page_size, uint32_t target_page_size);
 
 	  public:
 		static const constexpr size_t min_space =
@@ -319,11 +331,15 @@ struct BTree : public Segment {
 		/// Constructor.
 		explicit LeafNode(uint32_t page_size) : Node(page_size, 0) {}
 
+		/// The number of bytes required on the page to insert the given
+		/// key/value pair.
+		size_t required_space(const KeyT &key, const ValueT &value) const {
+			return (key.size() + value.size() + sizeof(LeafSlot));
+		}
 		/// Returns true if this leaf has enough space for the given key/value
 		/// pair.
 		bool has_space(const KeyT &key, const ValueT &value) const {
-			return get_free_space() >=
-				   (key.size() + value.size() + sizeof(LeafSlot));
+			return get_free_space() >= required_space(key, value);
 		}
 
 		/// Get the index of the first key that is not less than than a provided
@@ -378,6 +394,9 @@ struct BTree : public Segment {
 
 		/// Moves all key-value pairs up to make space on the leaf.f
 		void compactify(uint32_t page_size);
+		/// Reduces the size of the node. `target_page_size` must be smaller
+		/// than `current_page_size`.
+		void shrink(uint32_t current_page_size, uint32_t target_page_size);
 
 		/// The minimum of space required on a page to store a single entry.
 		static const constexpr size_t min_space =

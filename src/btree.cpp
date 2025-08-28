@@ -248,7 +248,7 @@ void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 			auto [curr_key, curr_pid] = insertion_queue.back();
 
 			// Split inner node. Moving up.
-			if (!curr_node->has_space(curr_key)) {
+			if (!curr_node->has_space(curr_key, curr_pid)) {
 				// Create new node.
 				const auto new_pid = get_new_page();
 				auto *new_frame = &buffer_manager.fix_page(segment_id, new_pid,
@@ -279,7 +279,6 @@ void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 				for (auto *frame : locked_nodes)
 					// Don't mark dirty here. Done while splitting.
 					buffer_manager.unfix_page(*frame, false);
-				this->print();
 				throw std::logic_error(
 					"InnerNode::insert_split(): Insert did not succeed.");
 			}
@@ -532,7 +531,7 @@ template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 bool BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::insert_split(
 	const KeyT &new_pivot, PageID new_child) {
 	// Sanity checks.
-	assert(has_space(new_pivot));
+	assert(has_space(new_pivot, new_child));
 	assert(upper);
 
 	auto *slot_target = lower_bound(new_pivot);
@@ -574,8 +573,7 @@ template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 bool BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::insert(const KeyT &new_pivot,
 														  PageID new_child) {
 	// Sanity checks.
-	assert(has_space(new_pivot));
-
+	assert(has_space(new_pivot, new_child));
 	assert(upper);
 
 	// Find target position for new pivotal slot.
@@ -661,7 +659,6 @@ void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::Pivot::print(
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::compactify(
 	uint32_t page_size) {
-	// std::cout << "InnerNode::compactify" << std::endl;
 	// Collect all slot pointers.
 	std::vector<Pivot *> slots;
 	for (auto *slot = slots_begin(); slot < slots_end(); ++slot) {
@@ -685,6 +682,34 @@ void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::compactify(
 
 	// Update data_start.
 	this->data_start = target_offset;
+}
+// -----------------------------------------------------------------
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::shrink(
+	uint32_t current_page_size, uint32_t target_page_size) {
+	// Get the distance we need to move the data segment up by.
+	assert(current_page_size > target_page_size);
+	auto size_reduction = current_page_size - target_page_size;
+
+	// Move full data segment up.
+	assert(this->data_start <= current_page_size);
+	auto data_size = current_page_size - this->data_start;
+	auto *current_data_start = this->get_data() + this->data_start;
+	auto *target_data_start = current_data_start - size_reduction;
+	assert(target_data_start < current_data_start);
+	assert(target_data_start >=
+		   reinterpret_cast<std::byte *>(
+			   this->slots_end())); // Do not overwrite slot segment.
+	std::memmove(target_data_start, current_data_start, data_size);
+
+	// Update all slots.
+	for (auto slot = slots_begin(); slot < slots_end(); ++slot) {
+		assert(slot->offset > size_reduction);
+		slot->offset -= size_reduction;
+	}
+
+	// Update data_start.
+	this->data_start -= size_reduction;
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
@@ -811,9 +836,6 @@ void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::print() {
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::compactify(
 	uint32_t page_size) {
-	// std::cout << "LeafNode::compactify" << std::endl;
-	// std::cout << "Before compactifying node:" << std::endl;
-	// print();
 	// Collect all slot pointers.
 	std::vector<LeafSlot *> slots;
 	for (auto *slot = slots_begin(); slot < slots_end(); ++slot) {
@@ -837,11 +859,36 @@ void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::compactify(
 		slot->offset = target_offset;
 	}
 
-	// std::cout << "After compactifying node:" << std::endl;
-	// print();
-
 	// Update data_start.
 	this->data_start = target_offset;
+}
+// -----------------------------------------------------------------
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::shrink(
+	uint32_t current_page_size, uint32_t target_page_size) {
+	// Get the distance we need to move the data segment up by.
+	assert(current_page_size > target_page_size);
+	auto size_reduction = current_page_size - target_page_size;
+
+	// Move full data segment up.
+	assert(this->data_start <= current_page_size);
+	auto data_size = current_page_size - this->data_start;
+	auto *current_data_start = this->get_data() + this->data_start;
+	auto *target_data_start = current_data_start - size_reduction;
+	assert(target_data_start < current_data_start);
+	assert(target_data_start >=
+		   reinterpret_cast<std::byte *>(
+			   this->slots_end())); // Do not overwrite slot segment.
+	std::memmove(target_data_start, current_data_start, data_size);
+
+	// Update all slots.
+	for (auto slot = slots_begin(); slot < slots_end(); ++slot) {
+		assert(slot->offset > size_reduction);
+		slot->offset -= size_reduction;
+	}
+
+	// Update data_start.
+	this->data_start -= size_reduction;
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>

@@ -5,7 +5,6 @@
 
 #include <gtest/gtest.h>
 #include <memory>
-#include <random>
 
 using namespace bbbtree;
 
@@ -252,13 +251,12 @@ TEST_F(BBBTreeTest, BufferLeafDeltasInDeltaTree) {
 }
 // -----------------------------------------------------------------
 /// Load a node from the disk.
-TEST_F(BBBTreeTest, NodeSplitsInDeltaTree) {
+TEST_F(BBBTreeTest, LeafSplitsInDeltaTree) {
 	size_t page_size = TEST_PAGE_SIZE;
 	std::unique_ptr<BufferManager> buffer_manager =
 		std::make_unique<BufferManager>(page_size, TEST_NUM_PAGES, true);
 	std::unique_ptr<BBBTreeInt> bbbtree_int =
 		std::make_unique<BBBTreeInt>(TEST_SEGMENT_ID, *buffer_manager);
-	std::unordered_map<UInt64, TID> expected_map{};
 
 	size_t tuples_per_leaf = page_size / (sizeof(UInt64) + sizeof(TID) + 12);
 
@@ -273,41 +271,138 @@ TEST_F(BBBTreeTest, NodeSplitsInDeltaTree) {
 	buffer_manager->clear_all();
 
 	// Split the node.
-	auto node_splits_before = stats.inner_node_splits;
+	auto node_splits_before = stats.leaf_node_splits;
 	EXPECT_TRUE(bbbtree_int->insert(i, i + 2));
 	EXPECT_TRUE(bbbtree_int->lookup(i).has_value());
 	EXPECT_EQ(bbbtree_int->lookup(i), i + 2);
-	auto node_splits_after = stats.inner_node_splits;
+	auto node_splits_after = stats.leaf_node_splits;
 	EXPECT_TRUE(node_splits_before < node_splits_after);
-
-	bbbtree_int->print();
 	buffer_manager->clear_all();
 
 	// Loaded into memory, the BTree is complete because deltas are being
 	// applied.
 	for (size_t j = 1; j <= i; j++) {
-		EXPECT_TRUE(bbbtree_int->insert(j, j + 2));
 		EXPECT_TRUE(bbbtree_int->lookup(j).has_value());
 		EXPECT_EQ(bbbtree_int->lookup(j), j + 2);
 	}
+	buffer_manager->clear_all();
 
+	// Check nodes' state on disk.
 	{
-		// Verify that the left node's changes are not on disk.
-		// Using another btree that has no real page logic to apply on load.
 		TestPageLogic<false> non_applying_page_logic;
-		BTreeInt btree_int{TEST_SEGMENT_ID, *buffer_manager,
-						   &non_applying_page_logic};
-		EXPECT_TRUE(btree_int.lookup(0).has_value());
-		EXPECT_FALSE(btree_int.lookup(1).has_value());
+		auto &frame1 = buffer_manager->fix_page(TEST_SEGMENT_ID, 1, true,
+												&non_applying_page_logic);
+		auto *node1 = reinterpret_cast<BTreeInt::LeafNode *>(frame1.get_data());
+		// Node 1 does not have its node split on disk. So all keys are still
+		// present.
+		EXPECT_TRUE(node1->slot_count == 4);
+		EXPECT_TRUE(node1->lookup(UInt64{1}).has_value());
+		EXPECT_TRUE(node1->lookup(UInt64{2}).has_value());
+		EXPECT_TRUE(node1->lookup(UInt64{3}).has_value());
+		EXPECT_TRUE(node1->lookup(UInt64{4}).has_value());
+		buffer_manager->unfix_page(frame1, false);
+
+		auto &frame2 = buffer_manager->fix_page(TEST_SEGMENT_ID, 2, true,
+												&non_applying_page_logic);
+		auto *node2 = reinterpret_cast<BTreeInt::LeafNode *>(frame2.get_data());
+		// Node 2 was created newly so all its inserted keys are also on disk.
+		EXPECT_FALSE(node2->lookup(UInt64{1}).has_value());
+		EXPECT_FALSE(node2->lookup(UInt64{2}).has_value());
+		EXPECT_TRUE(node2->lookup(UInt64{3}).has_value());
+		EXPECT_TRUE(node2->lookup(UInt64{4}).has_value());
+		buffer_manager->unfix_page(frame2, false);
+	}
+}
+// -----------------------------------------------------------------
+// Inserts following a split are handled by the delta tree.
+TEST_F(BBBTreeTest, SplitAndInserts) {
+
+	class TestBBBTree : public BBBTreeInt {
+	  public:
+		TestBBBTree(SegmentID segment_id, BufferManager &buffer_manager)
+			: BBBTreeInt(segment_id, buffer_manager) {}
+
+		DeltaTreeInt *get_delta_tree() { return &(this->delta_tree); }
+	};
+
+	size_t page_size = TEST_PAGE_SIZE;
+	std::unique_ptr<BufferManager> buffer_manager =
+		std::make_unique<BufferManager>(page_size, TEST_NUM_PAGES, true);
+	std::unique_ptr<TestBBBTree> bbbtree_int =
+		std::make_unique<TestBBBTree>(TEST_SEGMENT_ID, *buffer_manager);
+
+	size_t tuples_per_leaf = page_size / (sizeof(UInt64) + sizeof(TID) + 12);
+
+	// Fill up the single node.
+	size_t i = 1;
+	for (; i <= tuples_per_leaf; i++) {
+		EXPECT_TRUE(bbbtree_int->insert(i, i + 2));
+		EXPECT_TRUE(bbbtree_int->lookup(i).has_value());
+		EXPECT_EQ(bbbtree_int->lookup(i), i + 2);
+	}
+	// Force node to disk.
+	buffer_manager->clear_all();
+
+	// Split the node.
+	auto node_splits_before = stats.leaf_node_splits;
+	EXPECT_TRUE(bbbtree_int->insert(i, i + 2));
+	EXPECT_TRUE(bbbtree_int->lookup(i).has_value());
+	EXPECT_EQ(bbbtree_int->lookup(i), i + 2);
+	auto node_splits_after = stats.leaf_node_splits;
+	EXPECT_TRUE(node_splits_before < node_splits_after);
+
+	// Insert into the left node again.
+	EXPECT_TRUE(bbbtree_int->insert(0, 2));
+	EXPECT_TRUE(bbbtree_int->lookup(0).has_value());
+	EXPECT_EQ(bbbtree_int->lookup(0), 2);
+	buffer_manager->clear_all();
+
+	// Inserted value exists in memory due to applying deltas from the delta
+	// tree.
+	EXPECT_TRUE(bbbtree_int->lookup(0).has_value());
+	buffer_manager->clear_all();
+
+	// Check node state in memory: Inserted value and split exist in memory.
+	{
+		auto &frame1 = buffer_manager->fix_page(TEST_SEGMENT_ID, 1, true,
+												bbbtree_int->get_delta_tree());
+		auto *node1 = reinterpret_cast<BTreeInt::LeafNode *>(frame1.get_data());
+		EXPECT_TRUE(node1->slot_count == 3);
+		EXPECT_TRUE(node1->lookup(UInt64{0}).has_value());
+		EXPECT_TRUE(node1->lookup(UInt64{1}).has_value());
+		EXPECT_TRUE(node1->lookup(UInt64{2}).has_value());
+		EXPECT_FALSE(node1->lookup(UInt64{3}).has_value());
+		EXPECT_FALSE(node1->lookup(UInt64{4}).has_value());
+		buffer_manager->unfix_page(frame1, false);
 		buffer_manager->clear_all();
 	}
-	// Check that left node and new root is written out.
-	// Right node is not written out but applied correctly.
+
+	// Check node state on disk: Inserted value and split does not exist on
+	// disk.
+	{
+		TestPageLogic<false> non_applying_page_logic;
+		auto &frame1 = buffer_manager->fix_page(TEST_SEGMENT_ID, 1, true,
+												&non_applying_page_logic);
+		auto *node1 = reinterpret_cast<BTreeInt::LeafNode *>(frame1.get_data());
+		// Node 1 does not have its node split on disk. So all keys are still
+		// present.
+		EXPECT_TRUE(node1->slot_count == 4);
+		EXPECT_FALSE(node1->lookup(UInt64{0}).has_value());
+		EXPECT_TRUE(node1->lookup(UInt64{1}).has_value());
+		EXPECT_TRUE(node1->lookup(UInt64{2}).has_value());
+		EXPECT_TRUE(node1->lookup(UInt64{3}).has_value());
+		EXPECT_TRUE(node1->lookup(UInt64{4}).has_value());
+		buffer_manager->unfix_page(frame1, false);
+	}
 }
+// -----------------------------------------------------------------
+// TODO: `insert_split` in an inner node is extracted and applied correctly.
+TEST_F(BBBTreeTest, InnerNodeInsertInDeltaTree) {}
 // TODO: When we extract deltas and apply them again, the page remains in clean
 // state. When no changes add on, the page is discarded on eviction and deltas
 // applied at load. When changes add on, we delete the deltas from the tree and
 // add new ones. That means we need to keep the slot state when applying deltas.
 // When we actually write out the page, we clean all slots of tracking state.
+TEST_F(BBBTreeTest, NodeInDeltaTreeBecomesDirtier) {}
 // -----------------------------------------------------------------
 } // namespace
