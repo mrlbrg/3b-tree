@@ -65,7 +65,6 @@ template <KeyIndexable KeyT, ValueIndexable ValueT> struct Delta {
 // -----------------------------------------------------------------
 /// Deltas to be stored as values in a delta BTree.
 template <KeyIndexable KeyT, ValueIndexable ValueT> struct Deltas {
-
 	using LeafDelta = Delta<KeyT, ValueT>;
 	using InnerNodeDelta = Delta<KeyT, PID>;
 	using LeafDeltas = std::vector<LeafDelta>;

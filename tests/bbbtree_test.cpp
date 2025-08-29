@@ -432,7 +432,7 @@ TEST_F(BBBTreeTest, InnerNodeInsert) {
 	EXPECT_EQ(bbbtree_int->get_btree()->height(), size_t(2));
 	buffer_manager->clear_all();
 
-	// Force another split.
+	// Force another split. Four nodes in tree. Three leafs.
 	node_splits_before = stats.leaf_node_splits;
 	while (stats.leaf_node_splits == node_splits_before) {
 		EXPECT_TRUE(bbbtree_int->insert(i, i + 2));
@@ -442,21 +442,91 @@ TEST_F(BBBTreeTest, InnerNodeInsert) {
 	}
 	buffer_manager->clear_all();
 
-	// In memory, all keys are found.
+	// In memory, all three leaf nodes are found.
 	for (size_t j = 0; j < i; ++j) {
 		EXPECT_TRUE(bbbtree_int->lookup(j).has_value());
 		EXPECT_EQ(bbbtree_int->lookup(j), j + 2);
 	}
 	buffer_manager->clear_all();
 
-	// TODO: Inspect the disk state. The root does not have the newly inserted
-	// split on disk. and the upper is outdated.
+	// On disk: Root does not have the newly inserted node. Upper is outdated.
+	{
+		TestPageLogic<false> non_applying_page_logic;
+		auto &frame = buffer_manager->fix_page(TEST_SEGMENT_ID, 3, true,
+											   &non_applying_page_logic);
+		auto *node = reinterpret_cast<BTreeInt::InnerNode *>(frame.get_data());
+
+		EXPECT_EQ(node->slot_count, 1);
+		EXPECT_EQ(node->upper, PageID(2));
+		buffer_manager->unfix_page(frame, false);
+	}
 }
 // -----------------------------------------------------------------
 // A split child results in an insert of a new slot in the parent and an update
 // of the split slot in the parent (if not the upper child was split). Those
 // must be tracked correctly.
-TEST_F(BBBTreeTest, InnerNodeUpdate) {}
+TEST_F(BBBTreeTest, InnerNodeUpdate) {
+	class TestBBBTree : public BBBTreeInt {
+	  public:
+		TestBBBTree(SegmentID segment_id, BufferManager &buffer_manager)
+			: BBBTreeInt(segment_id, buffer_manager) {}
+
+		DeltaTreeInt *get_delta_tree() { return &(this->delta_tree); }
+
+		BTreeInt *get_btree() { return &this->btree; }
+	};
+
+	size_t page_size = 128;
+	std::unique_ptr<BufferManager> buffer_manager =
+		std::make_unique<BufferManager>(page_size, TEST_NUM_PAGES, true);
+	std::unique_ptr<TestBBBTree> bbbtree_int =
+		std::make_unique<TestBBBTree>(TEST_SEGMENT_ID, *buffer_manager);
+
+	// Create a tree of three nodes and write all out.
+	uint64_t start = 245'321;
+	uint64_t i = start;
+	auto node_splits_before = stats.leaf_node_splits;
+	while (stats.leaf_node_splits == node_splits_before) {
+		EXPECT_TRUE(bbbtree_int->insert(i, i + 2));
+		EXPECT_TRUE(bbbtree_int->lookup(i).has_value());
+		EXPECT_EQ(bbbtree_int->lookup(i), i + 2);
+		--i;
+	}
+	EXPECT_EQ(bbbtree_int->get_btree()->height(), size_t(2));
+	buffer_manager->clear_all();
+
+	// Force another split on the left-most node to make sure we're not
+	// splitting the `upper` child of the root.
+	node_splits_before = stats.leaf_node_splits;
+	while (stats.leaf_node_splits == node_splits_before) {
+		EXPECT_TRUE(bbbtree_int->insert(i, i + 2));
+		EXPECT_TRUE(bbbtree_int->lookup(i).has_value());
+		EXPECT_EQ(bbbtree_int->lookup(i), i + 2);
+		--i;
+	}
+	buffer_manager->clear_all();
+
+	// In memory, all keys are found.
+	for (size_t j = start; j > i; --j) {
+		EXPECT_TRUE(bbbtree_int->lookup(j).has_value());
+		EXPECT_EQ(bbbtree_int->lookup(j), j + 2);
+	}
+	buffer_manager->clear_all();
+
+	// On disk: Root does not have the newly inserted node. Upper is outdated.
+	{
+		TestPageLogic<false> non_applying_page_logic;
+		auto &frame = buffer_manager->fix_page(TEST_SEGMENT_ID, 3, true,
+											   &non_applying_page_logic);
+		auto *node = reinterpret_cast<BTreeInt::InnerNode *>(frame.get_data());
+
+		EXPECT_EQ(node->upper, PageID(2));
+		// The third leaf does not exist.
+		EXPECT_EQ(node->slot_count, 1);
+		EXPECT_EQ(node->lookup(i), PageID(1));
+		buffer_manager->unfix_page(frame, false);
+	}
+}
 // -----------------------------------------------------------------
 // Deltas are applied repeatedly when a page is loaded repeatedly. The page
 // remains in clean state.

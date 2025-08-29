@@ -34,7 +34,7 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 	bool before_unload(char *data, const State &state,
 					   PageID page_ide) override;
 	/// Looks up the deltas for the given node and applies them.
-	void after_load(char *data, PageID page_ide) override;
+	void after_load(char *data, PageID page_id) override;
 
   private:
 	/// Cleans the slots of a node of their dirty state. Done to reset the state
@@ -51,7 +51,7 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 	/// Calls the correct cleaning codefor the node type.
 	void clean_node(Node *node);
 	/// Calls the correct extraction code for the node type.
-	void store_deltas(PID &&page_id, const Node *node);
+	void store_deltas(PageID page_id, const Node *node);
 };
 // -----------------------------------------------------------------
 /// A B-Tree that can buffer its deltas. Cannot just inherit from `BTree`

@@ -1,8 +1,8 @@
 #include "bbbtree/bbbtree.h"
+#include "bbbtree/btree.h"
 #include "bbbtree/buffer_manager.h"
 #include <cstdint>
 #include <cstring>
-#include <string>
 
 namespace bbbtree {
 // -----------------------------------------------------------------
@@ -77,16 +77,27 @@ void DeltaTree<KeyT, ValueT>::extract_deltas(const NodeT *node,
 											 DeltasT &deltas) {
 	for (const auto *slot = node->slots_begin(); slot < node->slots_end();
 		 ++slot) {
-		if (slot->state == OperationType::Inserted)
+		switch (slot->state) {
+		case OperationType::Unchanged:
+			continue;
+		case OperationType::Inserted:
 			deltas.emplace_back(slot->state, slot->get_key(node->get_data()),
 								slot->get_value(node->get_data()));
+			break;
+		case OperationType::Updated:
+			assert(!node->is_leaf()); // Not supporting leaf node updates yet.
+			deltas.emplace_back(slot->state, slot->get_key(node->get_data()),
+								slot->get_value(node->get_data()));
+			break;
+		default:
+			throw std::logic_error("DeltaTree::extract_deltas(): Unknown "
+								   "operation type in slot.");
+		}
 	}
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
-void DeltaTree<KeyT, ValueT>::store_deltas(PID &&page_id, const Node *node) {
-	std::variant<LeafDeltas, InnerNodeDeltas> deltas;
-
+void DeltaTree<KeyT, ValueT>::store_deltas(PageID page_id, const Node *node) {
 	bool success = false;
 	if (node->is_leaf()) {
 		LeafDeltas deltas{};
@@ -95,16 +106,14 @@ void DeltaTree<KeyT, ValueT>::store_deltas(PID &&page_id, const Node *node) {
 		success = this->insert(std::move(page_id),
 							   {std::move(deltas), leaf->slot_count});
 	} else {
-		InnerNodeDeltas deltas;
+		InnerNodeDeltas deltas{};
 		auto *inner_node = reinterpret_cast<const InnerNode *>(node);
 		extract_deltas(inner_node, deltas);
 		success = this->insert(
 			std::move(page_id),
 			{std::move(deltas), inner_node->upper, inner_node->slot_count});
 	}
-
-	assert(success && "DeltaTree::store_deltas(): Failed to insert deltas "
-					  "into delta tree. Page already has a delta in the tree.");
+	assert(success);
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
@@ -116,10 +125,10 @@ void DeltaTree<KeyT, ValueT>::apply_deltas(NodeT *node, const DeltasT &deltas,
 		auto &[key, value] = entry;
 		if (op_type == OperationType::Inserted) {
 			auto success = node->insert(key, value);
-			if (!success)
-				throw std::logic_error("DeltaTree::after_load(): "
-									   "Failed to apply delta to "
-									   "node. Key already exists.");
+			assert(success);
+		} else if (op_type == OperationType::Updated) {
+			assert(!node->is_leaf()); // Not supporting leaf node updates yet.
+			node->update(key, value);
 		} else {
 			throw std::logic_error("DeltaTree::after_load(): "
 								   "Operation Type not implemented "

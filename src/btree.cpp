@@ -121,7 +121,6 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::insert(const KeyT &key,
 	}
 
 restart:
-	// TODO: This frame is not locked exclusively.
 	auto &leaf_frame = get_leaf(key, true);
 	auto &leaf = *reinterpret_cast<LeafNode *>(leaf_frame.get_data());
 
@@ -566,32 +565,54 @@ void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::insert_split(
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
-bool BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::insert(const KeyT &new_pivot,
+void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::update(const KeyT &key,
 														  PageID new_child) {
+	auto has_child = [&](const Pivot *slot_end, PageID child) -> bool {
+		for (auto *slot = slots_begin(); slot < slot_end; ++slot) {
+			if (slot->child == child)
+				return true;
+		}
+		return false;
+	};
+
+	auto *slot = lower_bound(key);
+	assert(slot != slots_end());
+	assert(slot->get_key(this->get_data()) == key);
+	auto old_child = slot->child;
+	slot->child = new_child;
+	// Sanity Check: When updating a slot to a new child, we must make
+	// sure we don't loose the old child, but that a previous slot has
+	// been inserted with the old child.
+	assert(has_child(slot, old_child));
+	if constexpr (UseDeltaTree) {
+		assert(slot->state == OperationType::Unchanged);
+		slot->state = OperationType::Updated;
+	}
+}
+// -----------------------------------------------------------------
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+bool BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::insert(
+	const KeyT &new_pivot, PageID new_child, bool allow_duplicates) {
 	// Sanity checks.
 	assert(has_space(new_pivot, new_child));
 	assert(upper);
 
 	// Find target position for new pivotal slot.
-	// Must always be the end because we only use this method to insert already
-	// ordered slots from a splitting sibling node.
-	assert(lower_bound(new_pivot) == slots_end());
-	auto *slot_target = slots_end();
-	// auto *slot_target = lower_bound(new_pivot);
-	// if (slot_target != slots_end()) {
-	// 	const auto found_pivot = slot_target->get_key(this->get_data());
-	// 	// Keys must be unique. We don't throw here because we don't manage
-	// 	// the lock.
-	// 	if (found_pivot == new_pivot)
-	// 		return false;
-	// }
+	auto *slot_target = lower_bound(new_pivot);
+	if (!allow_duplicates && slot_target != slots_end()) {
+		const auto found_pivot = slot_target->get_key(this->get_data());
+		// Keys must be unique. We don't throw here because we don't manage
+		// the lock.
+		if (found_pivot == new_pivot)
+			return false;
+	}
 
 	// Move each slot up by one to make space for new one.
-	// for (auto *slot = slots_end(); slot > slot_target; --slot) {
-	// 	auto &source_slot = *(slot - 1);
-	// 	auto &target_slot = *(slot);
-	// 	target_slot = source_slot;
-	// }
+	for (auto *slot = slots_end(); slot > slot_target; --slot) {
+		auto &source_slot = *(slot - 1);
+		auto &target_slot = *(slot);
+		target_slot = source_slot;
+	}
 	// Insert new slot.
 	this->data_start -= new_pivot.size();
 	++this->slot_count;
@@ -600,9 +621,9 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::insert(const KeyT &new_pivot,
 	assert(reinterpret_cast<std::byte *>(slots_end()) <=
 		   this->get_data() + this->data_start);
 
-	// if constexpr (UseDeltaTree) {
-	// 	slot_target->state = OperationType::Inserted;
-	// }
+	if constexpr (UseDeltaTree) {
+		slot_target->state = OperationType::Inserted;
+	}
 
 	return true;
 }
@@ -788,9 +809,10 @@ BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::lookup(const KeyT &key) {
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
-bool BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::insert(const KeyT &key,
-														 const ValueT &value) {
+bool BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::insert(
+	const KeyT &key, const ValueT &value, bool allow_duplicates) {
 	assert(has_space(key, value));
+	assert(!allow_duplicates); // Never allow duplicates for leafs.
 	// Find insert position.
 	auto *slot_target = lower_bound(key);
 	if (slot_target != slots_end()) {
@@ -821,6 +843,12 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::insert(const KeyT &key,
 	}
 
 	return true;
+}
+// -----------------------------------------------------------------
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::update(
+	const KeyT & /*key*/, const ValueT & /*value*/) {
+	throw std::logic_error("Not implemented yet.");
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
@@ -934,16 +962,16 @@ void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::LeafSlot::print(
 std::ostream &operator<<(std::ostream &os, const OperationType &type) {
 	switch (type) {
 	case OperationType::Unchanged:
-		os << "None";
+		os << "Unchanged";
 		break;
 	case OperationType::Inserted:
-		os << "Insert";
+		os << "Inserted";
 		break;
 	case OperationType::Deleted:
-		os << "Delete";
+		os << "Deleted";
 		break;
 	case OperationType::Updated:
-		os << "Update";
+		os << "Updated";
 		break;
 	default:
 		os << "Unknown";

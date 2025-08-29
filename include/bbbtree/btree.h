@@ -232,6 +232,9 @@ struct BTree : public Segment {
 		/// enough space.
 		void insert_split(const KeyT &new_pivot, PageID new_child);
 
+		/// Updates the child pointer for a given key.
+		void update(const KeyT &key, PageID new_child);
+
 		/// Returns all children of this node.
 		std::vector<PageID> get_children();
 
@@ -270,7 +273,8 @@ struct BTree : public Segment {
 		/// Insert a new slot. Used on the new node when splitting an inner
 		/// node. Returns false if key alredy exists. Caller must ensure that
 		/// there is enough space. Otherwise its undefined behavior.
-		[[nodiscard]] bool insert(const KeyT &pivot, PageID child);
+		[[nodiscard]] bool insert(const KeyT &pivot, PageID child,
+								  bool allow_duplicates = false);
 
 		/// Get begin of slots section.
 		Pivot *slots_begin() {
@@ -352,7 +356,11 @@ struct BTree : public Segment {
 		/// Inserts a key, value pair into this leaf. Returns true if key was
 		/// actually inserted. Returns false if key already exists. Caller must
 		/// ensure that there is enough space.
-		[[nodiscard]] bool insert(const KeyT &key, const ValueT &value);
+		[[nodiscard]] bool insert(const KeyT &key, const ValueT &value,
+								  bool allow_duplicates = false);
+
+		/// Updates the value for a given key. Not implemented yet.
+		void update(const KeyT &key, const ValueT &value);
 
 		/// Splits the leaf and returns the resulting pivotal key to be inserted
 		/// into the parent. `this` leaf is guaranteed to be the left node and
