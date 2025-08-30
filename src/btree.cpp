@@ -75,8 +75,16 @@ BTree<KeyT, ValueT, UseDeltaTree>::lookup(const KeyT &key) {
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
-void BTree<KeyT, ValueT, UseDeltaTree>::erase(const KeyT & /*key*/) {
-	throw std::logic_error("BTree::erase(): Not implemented yet.");
+void BTree<KeyT, ValueT, UseDeltaTree>::erase(const KeyT &key) {
+	assert(!UseDeltaTree && "Erase not supported with delta tree yet.");
+
+	auto &leaf_frame = get_leaf(key, true);
+	auto &leaf = *reinterpret_cast<LeafNode *>(leaf_frame.get_data());
+
+	// TODO: Not thread-safe.
+	leaf.erase(key);
+
+	buffer_manager.unfix_page(leaf_frame, true);
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
@@ -852,6 +860,25 @@ void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::update(
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+bool BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::erase(const KeyT &key) {
+	auto *slot = lower_bound(key);
+
+	// Key not found.
+	if (slot == slots_end())
+		return false;
+	if (slot->get_key(this->get_data()) != key)
+		return false;
+
+	// Remove slot by shifting all following slots down.
+	for (auto *s = slot; s < slots_end() - 1; ++s) {
+		*s = std::move(*(s + 1));
+	}
+	--this->slot_count;
+
+	return true;
+}
+// -----------------------------------------------------------------
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::print() {
 	// Print Header.
 	std::cout << ", data_start: " << this->data_start;
@@ -944,7 +971,6 @@ const ValueT BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::LeafSlot::get_value(
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::LeafSlot::print(
 	const std::byte *begin) const {
-
 	std::cout << "[" << sizeof(*this) << "B + " << this->key_size << "B + "
 			  << this->value_size << "B] ";
 	std::cout << "  offset: " << this->offset;

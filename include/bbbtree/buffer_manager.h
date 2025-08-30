@@ -71,6 +71,8 @@ class BufferFrame {
 	inline bool is_dirty() const { return state == State::DIRTY; }
 	/// Returns true if frame is new.
 	inline bool is_new() const { return state == State::NEW; }
+	/// Returns true if frame is clean.
+	inline bool is_clean() const { return state == State::CLEAN; }
 	/// Set frame as dirty.
 	inline void set_dirty() {
 		if (state != State::NEW)

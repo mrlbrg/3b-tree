@@ -23,8 +23,9 @@ bool DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
 
 	assert(state == State::DIRTY);
 
-	// TODO: When `page_id` already has an entry in the delta tree, we should
-	// remove it first here.
+	// TODO: Do not erase when there is nothing. Just allow making an insert
+	// that updates the value if the key exists already.
+	this->erase(page_id);
 
 	//  Scan all slots in the node and insert the deltas in the delta tree.
 	store_deltas(page_id, reinterpret_cast<const Node *>(data));
