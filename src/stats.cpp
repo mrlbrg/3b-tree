@@ -11,6 +11,7 @@ void Stats::clear() {
 	bytes_written_physically = 0;
 	pages_evicted = 0;
 	pages_written = 0;
+	pages_write_deferred = 0;
 }
 
 std::ostream &operator<<(std::ostream &os, const Stats &stats) {
@@ -22,6 +23,7 @@ std::ostream &operator<<(std::ostream &os, const Stats &stats) {
 	   << std::endl;
 	os << "pages_evicted: " << stats.pages_evicted << std::endl;
 	os << "pages_written: " << stats.pages_written << std::endl;
+	os << "pages_write_deferred: " << stats.pages_write_deferred << std::endl;
 
 	return os;
 }

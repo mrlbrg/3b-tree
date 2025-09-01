@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 #include <memory>
+#include <random>
 
 using namespace bbbtree;
 
@@ -17,6 +18,19 @@ using DeltaTreeInt = DeltaTree<UInt64, TID>;
 static const constexpr SegmentID TEST_SEGMENT_ID = 834;
 static const constexpr size_t TEST_PAGE_SIZE = 128;
 static const constexpr size_t TEST_NUM_PAGES = 5;
+// -----------------------------------------------------------------
+static std::vector<std::byte> get_random_bytes(size_t num_bytes) {
+	static std::random_device rd;  // Seed
+	static std::mt19937 gen(rd()); // Mersenne Twister engine
+	static std::uniform_int_distribution<uint8_t> dist(65, 90);
+
+	std::vector<std::byte> res;
+	res.resize(num_bytes);
+	for (auto &byte : res)
+		byte = std::byte(dist(gen));
+
+	return res;
+}
 // -----------------------------------------------------------------
 /// A shared buffer manager for all tests.
 class BBBTreeTest : public ::testing::Test {};
@@ -184,7 +198,7 @@ TEST_F(BBBTreeTest, DeltaTree) {
 	std::unique_ptr<DeltaTreeInt> delta_tree =
 		std::make_unique<DeltaTreeInt>(TEST_SEGMENT_ID, *buffer_manager);
 
-	// Create a superficial BTree node.
+	// TODO: Create a superficial BTree node.
 	// When the state is new, all slots should be cleaned.
 	// When the state is dirty, all deltas should be stored in the delta tree.
 	// When calling `after_load`, the deltas should be applied to the node.
@@ -607,9 +621,132 @@ TEST_F(BBBTreeTest, UpdatingDeltaTreeEntries) {
 		buffer_manager->unfix_page(frame1, false);
 	}
 }
-
 // ----------------------------------------------------------------
 // A node is cleaned of all its slot states when actually being written out.
 TEST_F(BBBTreeTest, PageIsActuallyWrittenOut) {}
+// ----------------------------------------------------------------
+/// A BBB-Tree that can be seeded with randomly generated tuples. Validated
+/// against a B-Tree.
+template <template <typename, typename, bool = false> typename IndexT,
+		  KeyIndexable KeyT, ValueIndexable ValueT, size_t PageSize>
+struct SeedableTree : public IndexT<KeyT, ValueT> {
+
+	static const constexpr size_t SPACE_ON_LEAF =
+		PageSize - BTreeInt::LeafNode::min_space;
+	static const constexpr size_t SPACE_ON_NODE =
+		PageSize - BTreeInt::InnerNode::min_space;
+
+	/// Constructor.
+	SeedableTree(SegmentID segment_id, BufferManager &buffer_manager)
+		: BBBTree<KeyT, ValueT>(segment_id, buffer_manager) {
+		stats.clear();
+	}
+	/// Destructor.
+	~SeedableTree() {
+		std::cout << stats << std::endl;
+		stats.clear();
+	}
+
+	/// Seed the tree with random key/value pairs.
+	/// @insert_size: the number of bytes to be inserted in total.
+	/// @min_size: the minimum number of bytes an inserted key should have.
+	void seed(size_t insert_size, size_t min_size = 1) {
+		auto get_kv_size = [min_size]() -> std::pair<uint16_t, uint16_t> {
+			static std::random_device rd;
+			static std::mt19937 gen(rd());
+			uint16_t key_size, value_size;
+			auto const constexpr max_size =
+				std::min(SPACE_ON_LEAF, SPACE_ON_NODE);
+			assert(min_size < max_size);
+			// Get Key Size.
+			if constexpr (std::is_same_v<KeyT, UInt64>) {
+				key_size = sizeof(KeyT);
+			} else {
+				std::uniform_int_distribution<uint16_t> dist(min_size,
+															 max_size - 1);
+				key_size = dist(gen);
+			}
+			// Get Value Size.
+			if constexpr (std::is_same_v<ValueT, UInt64>) {
+				value_size = sizeof(ValueT);
+			} else if constexpr (std::is_same_v<ValueT, TID>) {
+				value_size = sizeof(ValueT);
+			} else {
+				std::uniform_int_distribution<uint16_t> dist(1, max_size -
+																	key_size);
+				value_size = dist(gen);
+			}
+
+			return {key_size, value_size};
+		};
+
+		size_t num_bytes = 0;
+		while (num_bytes < insert_size) {
+			// Get random key and value.
+			auto [key_size, value_size] = get_kv_size();
+			data.push_back(
+				{get_random_bytes(key_size), get_random_bytes(value_size)});
+			auto &[key_data, value_data] = data.back();
+
+			KeyT key = KeyT::deserialize(&key_data[0], key_data.size());
+			ValueT value =
+				ValueT::deserialize(&value_data[0], value_data.size());
+
+			// Insert into tree.
+			if (expected_map.count(key) == 0) {
+				bool success = this->insert(key, value);
+				assert(success);
+				expected_map[key] = value;
+				assert(expected_map.size() == this->size());
+				num_bytes += key_size + value_size;
+				assert(this->height() < PageSize);
+			} else {
+				assert(this->insert(key, value) == false);
+				data.pop_back();
+			}
+		}
+	}
+
+	/// Validates that all previously `seed`ed key/value pairs are still
+	/// present in the tree.
+	/// @return: true if the tree contains all expected key/value pairs.
+	/// false otherwise.
+	bool validate() {
+		// Validate size
+		if (this->size() != expected_map.size())
+			return false;
+
+		// Validate stored values.
+		for (const auto &[key, value] : expected_map) {
+			auto res = this->lookup(key);
+			if (!res.has_value())
+				return false;
+			if (res.value() != value)
+				return false;
+		}
+
+		return true;
+	}
+
+	using KeyData = std::vector<std::byte>;
+	using ValueData = std::vector<std::byte>;
+
+	/// The buffer that owns the Key/Value data. Simulates page data.
+	std::vector<std::pair<KeyData, ValueData>> data;
+	/// The key/value pairs that are expected to live in the tree.
+	std::unordered_map<KeyT, ValueT> expected_map;
+};
+// A large tree can handle all kinds of deltas.
+TEST_F(BBBTreeTest, LargeIntTree) {
+	static const constexpr size_t page_size = 4096;
+
+	std::unique_ptr<BufferManager> buffer_manager =
+		std::make_unique<BufferManager>(page_size, TEST_NUM_PAGES, true);
+	SeedableTree<BBBTree, UInt64, TID, page_size> tree{TEST_SEGMENT_ID,
+													   *buffer_manager};
+
+	tree.seed(1'000);
+	EXPECT_TRUE(tree.validate());
+}
 // ----------------------------------------------------------------
 } // namespace

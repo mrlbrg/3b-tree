@@ -1,6 +1,8 @@
 #include "bbbtree/bbbtree.h"
 #include "bbbtree/btree.h"
 #include "bbbtree/buffer_manager.h"
+#include "bbbtree/stats.h"
+
 #include <cstdint>
 #include <cstring>
 
@@ -12,7 +14,7 @@ bool DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
 	// TODO: When we return true to continue to write out because
 	// write amplification is low,
 	// we must clean the slots of their dirty state too.
-	// TODO: When the page is actually written out, we need to remove it from
+	// TODO: When the page is actually written out, we need to erase it from
 	// the delta tree.
 
 	// Clean the slots of their dirty state when writing the node out.
@@ -30,6 +32,7 @@ bool DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
 	//  Scan all slots in the node and insert the deltas in the delta tree.
 	store_deltas(page_id, reinterpret_cast<const Node *>(data));
 
+	++stats.pages_write_deferred;
 	return false;
 }
 // -----------------------------------------------------------------
@@ -182,8 +185,8 @@ void DeltaTree<KeyT, ValueT>::apply_deltas(NodeT *node, const DeltasT &deltas,
 	node->slot_count = slot_count;
 }
 // -----------------------------------------------------------------
-template <KeyIndexable KeyT, ValueIndexable ValueT>
-void BBBTree<KeyT, ValueT>::print() {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+void BBBTree<KeyT, ValueT, UseDeltaTree>::print() {
 	std::cout << "B-Tree:" << std::endl;
 	btree.print();
 

@@ -57,7 +57,8 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 /// A B-Tree that can buffer its deltas. Cannot just inherit from `BTree`
 /// because the `DeltaTree` member must be initialized first but the constructor
 /// must fulfill certain requirements to be a database's index.
-template <KeyIndexable KeyT, ValueIndexable ValueT> class BBBTree {
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree = false>
+class BBBTree {
   public:
 	/// Constructor. The Delta Tree is stored in `segment_id` + 1.
 	BBBTree(SegmentID segment_id, BufferManager &buffer_manager)
@@ -75,6 +76,10 @@ template <KeyIndexable KeyT, ValueIndexable ValueT> class BBBTree {
 	/// Erase an entry in the tree.
 	inline void erase(const KeyT &key) { btree.erase(key); }
 
+	inline size_t size() { return btree.size(); }
+
+	inline size_t height() { return btree.height(); }
+
 	/// Print tree and its delta tree. Not thread-safe.
 	void print();
 
@@ -84,6 +89,8 @@ template <KeyIndexable KeyT, ValueIndexable ValueT> class BBBTree {
 	DeltaTree<KeyT, ValueT> delta_tree;
 	/// The actual index tree that stores the key-value pairs.
 	BTree<KeyT, ValueT, true> btree;
+
+	static_assert(!UseDeltaTree);
 };
 // -----------------------------------------------------------------
 } // namespace bbbtree

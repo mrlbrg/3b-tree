@@ -8,7 +8,7 @@
 
 namespace bbbtree {
 // -----------------------------------------------------------------
-/// A SegmentID corresponds to a file.
+/// A SegmentID corresponds to a file. Could make it 1 Byte.
 using SegmentID = uint16_t;
 /// A Page within a Segment.
 using PageID = uint64_t;

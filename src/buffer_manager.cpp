@@ -210,8 +210,11 @@ File &BufferManager::get_segment(SegmentID segment_id) {
 void BufferManager::clear_all() {
 restart:
 	free_buffer_frames.clear();
-	for (auto &frame : page_frames)
+	for (auto &frame : page_frames) {
+		if (frame.state == State::UNDEFINED)
+			continue;
 		remove(frame);
+	}
 	// During `unload` of BTree nodes, some pages might have been loaded
 	// into the buffer to store the deltas. Therefore we might have to go
 	// another round to also clear all delta tree pages from the buffer.
