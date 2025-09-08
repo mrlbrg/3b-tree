@@ -29,7 +29,7 @@ bool DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
 		return true;
 	}
 	assert(state == State::DIRTY);
-	assert(node->get_update_ratio(page_size) > 0);
+	assert(node->num_bytes_changed > 0);
 
 	// TODO: Do not erase when there is nothing. Just allow making an insert
 	// that updates the value if the key exists already i.e. upsert.
@@ -193,12 +193,14 @@ void DeltaTree<KeyT, ValueT>::apply_deltas(NodeT *node, const DeltasT &deltas,
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
-void BBBTree<KeyT, ValueT, UseDeltaTree>::print() {
-	std::cout << "B-Tree:" << std::endl;
-	btree.print();
+std::ostream &operator<<(std::ostream &os,
+						 const BTree<KeyT, ValueT, UseDeltaTree> &type) {
+	os << "B-Tree:" << std::endl;
+	os << type.btree << std::endl;
+	os << "Delta Tree" << std::endl;
+	os << type.delta_tree << std::endl;
 
-	std::cout << "Delta Tree:" << std::endl;
-	delta_tree.print();
+	return os;
 }
 // -----------------------------------------------------------------
 // Explicit instantiations

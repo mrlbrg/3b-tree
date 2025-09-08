@@ -737,7 +737,7 @@ struct SeedableTree : public IndexT<KeyT, ValueT> {
 };
 // A large tree can handle all kinds of deltas.
 TEST_F(BBBTreeTest, LargeIntTree) {
-	static const constexpr size_t page_size = 4096;
+	static const constexpr size_t page_size = 128;
 
 	std::unique_ptr<BufferManager> buffer_manager =
 		std::make_unique<BufferManager>(page_size, TEST_NUM_PAGES, true);

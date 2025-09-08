@@ -82,6 +82,12 @@ std::ostream &operator<<(std::ostream &os, const OperationType &type);
 template <bool TrackDeltas> struct SlotBase {};
 template <> struct SlotBase<true> {};
 // -----------------------------------------------------------------
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+struct BTree;
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+std::ostream &operator<<(std::ostream &os,
+						 const BTree<KeyT, ValueT, UseDeltaTree> &type);
+// -----------------------------------------------------------------
 /// External Storage index that maps from unique, possibly variable-length keys
 /// to TID identifying the tuple's location on the slotted pages. Due to
 /// variable-size key-support, we implement slots that map to <key, TID> pairs
@@ -257,7 +263,7 @@ struct BTree : public Segment {
 		PageID get_upper() { return upper; }
 
 		/// Print to standard output.
-		void print();
+		void print(std::ostream &os);
 
 		/// Indicates the position and length of the key within the page.
 		/// Contains the key's corresponding child (PageID).
@@ -274,7 +280,7 @@ struct BTree : public Segment {
 			PageID child;
 
 			/// Print the slot to std output.
-			void print(const std::byte *begin) const;
+			void print(std::ostream &os, const std::byte *begin) const;
 		};
 		/// Right-most child. Pivot for all keys bigger than the biggest pivot.
 		/// Must be set during node splitting. Zero is invalid.
@@ -340,7 +346,7 @@ struct BTree : public Segment {
 			/// to.
 			const ValueT get_value(const std::byte *begin) const;
 
-			void print(const std::byte *begin) const;
+			void print(std::ostream &os, const std::byte *begin) const;
 
 			/// The number of bytes from end of key to end of entry.
 			uint16_t value_size;
@@ -388,7 +394,7 @@ struct BTree : public Segment {
 									   size_t page_size);
 
 		/// Print leaf to standard output.
-		void print();
+		void print(std::ostream &os);
 
 		/// Get free space in bytes. Equals the space between the header + slots
 		/// and data section.
@@ -450,7 +456,12 @@ struct BTree : public Segment {
 	/// already. Holds all locks on the path for cascading splits.
 	void split(const KeyT &key, const ValueT &value);
 
+	/// Returns the next free page ID.
 	PageID get_new_page();
+
+	/// Prints the tree.
+	friend std::ostream &
+	operator<< <>(std::ostream &, const BTree<KeyT, ValueT, UseDeltaTree> &);
 };
 // -----------------------------------------------------------------
 } // namespace bbbtree

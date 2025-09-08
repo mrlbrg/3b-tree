@@ -9,6 +9,13 @@
 #include <sys/types.h>
 
 namespace bbbtree {
+
+// -----------------------------------------------------------------
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+class BBBTree;
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+std::ostream &operator<<(std::ostream &os,
+						 const BBBTree<KeyT, ValueT, UseDeltaTree> &type);
 // -----------------------------------------------------------------
 /// A delta tree is a BTree that maps from PIDs of the corresponding BTree
 /// nodes to deltas on that node.
@@ -82,8 +89,10 @@ class BBBTree {
 
 	inline size_t height() { return btree.height(); }
 
-	/// Print tree and its delta tree. Not thread-safe.
-	void print();
+	/// Prints the tree.
+	friend std::ostream &
+	operator<< <>(std::ostream &os,
+				  const BBBTree<KeyT, ValueT, UseDeltaTree> &tree);
 
   protected:
 	/// The delta tree that stores changes to entries of the `btree` nodes,

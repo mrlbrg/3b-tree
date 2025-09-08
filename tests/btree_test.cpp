@@ -293,7 +293,6 @@ TEST_F(BTreeTest, VariableSizeValues) {
 	std::cout << "Keys inserted: " << btree_str_to_str_->expected_map.size()
 			  << std::endl;
 	std::cout << "Tree height: " << btree_str_to_str_->height() << std::endl;
-	// btree_str_to_str_->print();
 	EXPECT_TRUE(btree_str_->validate());
 }
 /// A tree can handle thousands of variable sized keys and values. TODO.

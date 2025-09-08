@@ -298,44 +298,45 @@ void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
-void BTree<KeyT, ValueT, UseDeltaTree>::print() {
+std::ostream &operator<<(std::ostream &os,
+						 const BTree<KeyT, ValueT, UseDeltaTree> &type) {
 	// Acquire root to get height of tree.
-	auto &root_frame =
-		buffer_manager.fix_page(segment_id, root, false, page_logic);
+	auto &root_frame = type.buffer_manager.fix_page(type.segment_id, type.root,
+													false, type.page_logic);
 	auto *node = reinterpret_cast<
 		typename BTree<KeyT, ValueT, UseDeltaTree>::InnerNode *>(
 		root_frame.get_data());
 	auto level = node->level;
-	buffer_manager.unfix_page(root_frame, false);
+	type.buffer_manager.unfix_page(root_frame, false);
 
-	std::cout << std::endl;
-	std::cout << "root: " << root << std::endl;
-	std::cout << "next_free_page: " << next_free_page << std::endl;
+	os << std::endl;
+	os << "root: " << type.root << std::endl;
+	os << "next_free_page: " << type.next_free_page << std::endl;
 
 	// Traverse and print each level of nodes.
-	std::vector<PageID> nodes_on_current_level{root};
+	std::vector<PageID> nodes_on_current_level{type.root};
 
 	while (level > 0) {
-		std::cout << std::endl;
-		std::cout << "################ LEVEL " << level << " ###############"
-				  << std::endl;
+		os << std::endl;
+		os << "################ LEVEL " << level << " ###############"
+		   << std::endl;
 		// Print current level & collect their children.
 		std::vector<PageID> children{};
 		for (auto pid : nodes_on_current_level) {
 			// Acquire page.
-			auto &frame =
-				buffer_manager.fix_page(segment_id, pid, false, page_logic);
+			auto &frame = type.buffer_manager.fix_page(type.segment_id, pid,
+													   false, type.page_logic);
 			auto *node = reinterpret_cast<
 				typename BTree<KeyT, ValueT, UseDeltaTree>::InnerNode *>(
 				frame.get_data());
 
 			// Sanity Check.
 			assert(node->level == level);
-			std::cout << "[" << sizeof(*node) << "B] ";
-			std::cout << "PID " << pid;
-			node->print();
-			std::cout << "-----------------------------------------------------"
-					  << std::endl;
+			os << "[" << sizeof(*node) << "B] ";
+			os << "PID " << pid;
+			node->print(os);
+			os << "-----------------------------------------------------"
+			   << std::endl;
 
 			// Collect children
 			for (auto child : node->get_children()) {
@@ -344,34 +345,35 @@ void BTree<KeyT, ValueT, UseDeltaTree>::print() {
 			children.push_back(node->get_upper());
 
 			// Release page.
-			buffer_manager.unfix_page(frame, false);
+			type.buffer_manager.unfix_page(frame, false);
 		}
 		nodes_on_current_level = children;
 		--level;
 	}
 
 	// Traverse leaf level
-	std::cout << "################ LEVEL " << level << " ###############"
-			  << std::endl;
+	os << "################ LEVEL " << level << " ###############" << std::endl;
 	for (auto pid : nodes_on_current_level) {
-		auto &frame =
-			buffer_manager.fix_page(segment_id, pid, false, page_logic);
+		auto &frame = type.buffer_manager.fix_page(type.segment_id, pid, false,
+												   type.page_logic);
 		auto *leaf = reinterpret_cast<
 			typename BTree<KeyT, ValueT, UseDeltaTree>::LeafNode *>(
 			frame.get_data());
 		// Sanity Check.
 		assert(leaf->level == level);
 
-		std::cout << "[" << sizeof(*leaf) << "B] ";
-		std::cout << "PID " << pid;
-		leaf->print();
-		std::cout << "-----------------------------------------------------"
-				  << std::endl;
+		os << "[" << sizeof(*leaf) << "B] ";
+		os << "PID " << pid;
+		leaf->print(os);
+		os << "-----------------------------------------------------"
+		   << std::endl;
 
-		buffer_manager.unfix_page(frame, false);
+		type.buffer_manager.unfix_page(frame, false);
 	}
-	std::cout << "########################################################"
-			  << std::endl;
+	os << "########################################################"
+	   << std::endl;
+
+	return os;
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
@@ -665,21 +667,21 @@ BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::get_children() {
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
-void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::print() {
+void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::print(std::ostream &os) {
 	// Print Header.
-	std::cout << "	data_start: " << this->data_start;
-	std::cout << ", level: " << this->level;
-	std::cout << ", slot_count: " << this->slot_count;
+	os << "	data_start: " << this->data_start;
+	os << ", level: " << this->level;
+	os << ", slot_count: " << this->slot_count;
 	if constexpr (UseDeltaTree)
-		std::cout << ", num_bytes_changed: " << this->num_bytes_changed;
+		os << ", num_bytes_changed: " << this->num_bytes_changed;
 
-	std::cout << std::endl;
+	os << std::endl;
 
 	// Print Slots.
 	for (const auto *slot = slots_begin(); slot < slots_end(); slot++) {
-		slot->print(this->get_data());
+		slot->print(os, this->get_data());
 	}
-	std::cout << "  upper: " << upper << std::endl;
+	os << "  upper: " << upper << std::endl;
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
@@ -696,16 +698,16 @@ BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::Pivot::Pivot(
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::Pivot::print(
-	const std::byte *begin) const {
-	std::cout << "[" << sizeof(*this) << "B + " << this->key_size << "B + "
-			  << sizeof(this->child) << "B] ";
-	std::cout << "  offset: " << this->offset;
-	std::cout << ", key_size: " << this->key_size;
-	std::cout << ", pivot: " << this->get_key(begin);
-	std::cout << ", child: " << child << std::endl;
+	std::ostream &os, const std::byte *begin) const {
+	os << "[" << sizeof(*this) << "B + " << this->key_size << "B + "
+	   << sizeof(this->child) << "B] ";
+	os << "  offset: " << this->offset;
+	os << ", key_size: " << this->key_size;
+	os << ", pivot: " << this->get_key(begin);
+	os << ", child: " << child << std::endl;
 
 	if constexpr (UseDeltaTree) {
-		std::cout << "    state: " << this->state << std::endl;
+		os << "    state: " << this->state << std::endl;
 	}
 }
 // -----------------------------------------------------------------
@@ -919,20 +921,20 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::erase(const KeyT &key) {
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
-void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::print() {
+void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::print(std::ostream &os) {
 	// Print Header.
-	std::cout << ", data_start: " << this->data_start;
-	std::cout << ", level: " << this->level;
-	std::cout << ", slot_count: " << this->slot_count;
+	os << ", data_start: " << this->data_start;
+	os << ", level: " << this->level;
+	os << ", slot_count: " << this->slot_count;
 
 	if constexpr (UseDeltaTree)
-		std::cout << ", num_bytes_changed: " << this->num_bytes_changed;
+		os << ", num_bytes_changed: " << this->num_bytes_changed;
 
-	std::cout << ":" << std::endl;
+	os << ":" << std::endl;
 
 	// Print Slots.
 	for (const auto *slot = slots_begin(); slot < slots_end(); ++slot) {
-		slot->print(this->get_data());
+		slot->print(os, this->get_data());
 	}
 }
 // -----------------------------------------------------------------
@@ -1018,18 +1020,18 @@ const ValueT BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::LeafSlot::get_value(
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::LeafSlot::print(
-	const std::byte *begin) const {
-	std::cout << "[" << sizeof(*this) << "B + " << this->key_size << "B + "
-			  << this->value_size << "B] ";
-	std::cout << "  offset: " << this->offset;
-	std::cout << ", key_size: " << this->key_size;
-	std::cout << ", value_size: " << value_size;
+	std::ostream &os, const std::byte *begin) const {
+	os << "[" << sizeof(*this) << "B + " << this->key_size << "B + "
+	   << this->value_size << "B] ";
+	os << "  offset: " << this->offset;
+	os << ", key_size: " << this->key_size;
+	os << ", value_size: " << value_size;
 
-	std::cout << ", key: " << this->get_key(begin);
-	std::cout << ", value: " << get_value(begin) << std::endl;
+	os << ", key: " << this->get_key(begin);
+	os << ", value: " << get_value(begin) << std::endl;
 
 	if constexpr (UseDeltaTree) {
-		std::cout << "    state: " << this->state << std::endl;
+		os << "    state: " << this->state << std::endl;
 	}
 }
 // -----------------------------------------------------------------
@@ -1065,5 +1067,23 @@ template struct BTree<UInt64, TID, true>;
 template struct BTree<String, TID, true>;
 template struct BTree<PID, Deltas<UInt64, TID>>;
 template struct BTree<PID, Deltas<String, TID>>;
-// --------------------------------------------------------------
+template std::ostream &operator<<(std::ostream &, const BTree<UInt64, TID> &);
+template std::ostream &operator<<(std::ostream &,
+								  const BTree<UInt64, UInt64> &);
+template std::ostream &operator<<(std::ostream &,
+								  const BTree<UInt64, String> &);
+template std::ostream &operator<<(std::ostream &, const BTree<String, TID> &);
+template std::ostream &operator<<(std::ostream &,
+								  const BTree<String, UInt64> &);
+template std::ostream &operator<<(std::ostream &,
+								  const BTree<String, String> &);
+template std::ostream &operator<<(std::ostream &,
+								  const BTree<UInt64, TID, true> &);
+template std::ostream &operator<<(std::ostream &,
+								  const BTree<String, TID, true> &);
+template std::ostream &operator<<(std::ostream &,
+								  const BTree<PID, Deltas<UInt64, TID>> &);
+template std::ostream &operator<<(std::ostream &,
+								  const BTree<PID, Deltas<String, TID>> &);
+// -----------------------------------------------------------------
 } // namespace bbbtree
