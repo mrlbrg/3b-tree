@@ -4,15 +4,14 @@
 #include "bbbtree/buffer_manager.h"
 #include "bbbtree/delta.h"
 #include "bbbtree/types.h"
+
 #include <cstdint>
 #include <sys/types.h>
 
 namespace bbbtree {
 // -----------------------------------------------------------------
-static const constexpr SegmentID DELTA_SEGMENT_ID = 123;
-// -----------------------------------------------------------------
-/// A delta tree is a BTree that maps from PIDs of the corresponding BTree nodes
-/// to deltas on that node.
+/// A delta tree is a BTree that maps from PIDs of the corresponding BTree
+/// nodes to deltas on that node.
 template <KeyIndexable KeyT, ValueIndexable ValueT>
 class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 	using LeafDeltas = typename Deltas<KeyT, ValueT>::LeafDeltas;
@@ -22,6 +21,10 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 	using LeafNode = BTree<KeyT, ValueT, true>::LeafNode;
 	using InnerNode = BTree<KeyT, ValueT, true>::InnerNode;
 
+	// Every update ratio of a node smaller than this value will be buffered in
+	// the delta tree instead of written out.
+	static const constexpr uint16_t UPDATE_RATIO_THRESHOLD = 100;
+
   public:
 	/// Constructor.
 	DeltaTree(SegmentID segment_id, BufferManager &buffer_manager)
@@ -30,9 +33,8 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 
 	/// Scans the given BTree node for dirty entries and buffers them in the
 	/// delta tree.
-	/// TODO: Maybe only pass the frame data instead of the whole frame.
-	bool before_unload(char *data, const State &state,
-					   PageID page_ide) override;
+	bool before_unload(char *data, const State &state, PageID page_id,
+					   size_t page_size) override;
 	/// Looks up the deltas for the given node and applies them.
 	void after_load(char *data, PageID page_id) override;
 

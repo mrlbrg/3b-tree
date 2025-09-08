@@ -497,11 +497,16 @@ BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::split(InnerNode &new_node,
 	// Second half of slots is inserted into new, right leaf.
 	const auto *slot_to_copy = this->slots_begin() + pivot_i + 1;
 	while (slot_to_copy < this->slots_end()) {
-		auto success = new_node.insert(slot_to_copy->get_key(this->get_data()),
-									   slot_to_copy->child);
-		if (!success)
-			throw std::logic_error(
-				"InnerNode::split(): Insert did not succeed.");
+		auto key = slot_to_copy->get_key(this->get_data());
+		auto value = slot_to_copy->child;
+		auto success = new_node.insert(key, value);
+		assert(success);
+
+		// Count bytes that have changed on this node.
+		if constexpr (UseDeltaTree) {
+			if (slot_to_copy->state == OperationType::Unchanged)
+				this->num_bytes_changed += required_space(key, value);
+		}
 
 		++slot_to_copy;
 	}
@@ -544,12 +549,19 @@ void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::insert_split(
 		// Upper child was split.
 		old_child = upper;
 		upper = new_child;
+
+		// TODO: Also track changed bytes here? We don't know if upper has
+		// already changed. `upper` will always be tracked in the delta.
 	} else {
 		assert(slot_target->get_key(this->get_data()) != new_pivot);
 		old_child = slot_target->child;
 		slot_target->child = new_child;
 
 		if constexpr (UseDeltaTree) {
+			// Track the amount of change on the node.
+			if (slot_target->state == OperationType::Unchanged)
+				this->num_bytes_changed += required_space(
+					slot_target->get_key(this->get_data()), new_child);
 			// Indicate that the child has changed from the disk state. Unless
 			// it was newly inserted since loaded from disk.
 			if (slot_target->state != OperationType::Inserted)
@@ -570,6 +582,10 @@ void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::insert_split(
 		Pivot{this->get_data(), this->data_start, new_pivot, old_child};
 	assert(reinterpret_cast<std::byte *>(slots_end()) <=
 		   this->get_data() + this->data_start);
+
+	if constexpr (UseDeltaTree) {
+		this->num_bytes_changed += required_space(new_pivot, old_child);
+	}
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
@@ -631,6 +647,7 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::insert(
 
 	if constexpr (UseDeltaTree) {
 		slot_target->state = OperationType::Inserted;
+		this->num_bytes_changed += required_space(new_pivot, new_child);
 	}
 
 	return true;
@@ -652,7 +669,11 @@ void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::print() {
 	// Print Header.
 	std::cout << "	data_start: " << this->data_start;
 	std::cout << ", level: " << this->level;
-	std::cout << ", slot_count: " << this->slot_count << std::endl;
+	std::cout << ", slot_count: " << this->slot_count;
+	if constexpr (UseDeltaTree)
+		std::cout << ", num_bytes_changed: " << this->num_bytes_changed;
+
+	std::cout << std::endl;
 
 	// Print Slots.
 	for (const auto *slot = slots_begin(); slot < slots_end(); slot++) {
@@ -689,8 +710,8 @@ void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::Pivot::print(
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
-void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::compactify(
-	uint32_t page_size) {
+uint16_t
+BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::compactify(uint32_t page_size) {
 	// Collect all slot pointers.
 	std::vector<Pivot *> slots;
 	for (auto *slot = slots_begin(); slot < slots_end(); ++slot) {
@@ -713,7 +734,11 @@ void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::compactify(
 	}
 
 	// Update data_start.
+	assert(target_offset > this->data_start);
+	uint16_t saved_space = target_offset - this->data_start;
 	this->data_start = target_offset;
+
+	return saved_space;
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
@@ -738,6 +763,8 @@ void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::shrink(
 	for (auto slot = slots_begin(); slot < slots_end(); ++slot) {
 		assert(slot->offset > size_reduction);
 		slot->offset -= size_reduction;
+		assert(this->get_data() + slot->offset >=
+			   reinterpret_cast<std::byte *>(this->slots_end()));
 	}
 
 	// Update data_start.
@@ -764,15 +791,18 @@ const KeyT BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::split(
 		skew_left ? (this->slot_count + 1) / 2 : (this->slot_count / 2);
 
 	// Second half of slots is inserted into new, right leaf.
-	const auto *slot_to_copy = this->slots_begin() + num_slots_left;
-	while (slot_to_copy < this->slots_end()) {
-		auto success =
-			new_node.insert(slot_to_copy->get_key(this->get_data()),
-							slot_to_copy->get_value(this->get_data()));
-		if (!success)
-			throw std::logic_error("BTree::split(): Insert must succeed.");
+	for (const auto *slot_to_copy = this->slots_begin() + num_slots_left;
+		 slot_to_copy < this->slots_end(); ++slot_to_copy) {
+		auto key = slot_to_copy->get_key(this->get_data());
+		auto value = slot_to_copy->get_value(this->get_data());
+		auto success = new_node.insert(key, value);
+		assert(success);
 
-		++slot_to_copy;
+		// Track delta.
+		if constexpr (UseDeltaTree) {
+			if (slot_to_copy->state == OperationType::Unchanged)
+				this->num_bytes_changed += required_space(key, value);
+		}
 	}
 	assert(new_node.slot_count == this->slot_count - num_slots_left);
 
@@ -848,6 +878,7 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::insert(
 	// Track delta.
 	if constexpr (UseDeltaTree) {
 		slot_target->state = OperationType::Inserted;
+		this->num_bytes_changed += required_space(key, value);
 	}
 
 	return true;
@@ -869,6 +900,15 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::erase(const KeyT &key) {
 	if (slot->get_key(this->get_data()) != key)
 		return false;
 
+	// Track delta.
+	if constexpr (UseDeltaTree) {
+		// Only count changed bytes if they have not already been changed by a
+		// previous operation.
+		if (slot->state == OperationType::Unchanged)
+			this->num_bytes_changed +=
+				required_space(key, slot->get_value(this->get_data()));
+	}
+
 	// Remove slot by shifting all following slots down.
 	for (auto *s = slot; s < slots_end() - 1; ++s) {
 		*s = std::move(*(s + 1));
@@ -883,7 +923,12 @@ void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::print() {
 	// Print Header.
 	std::cout << ", data_start: " << this->data_start;
 	std::cout << ", level: " << this->level;
-	std::cout << ", slot_count: " << this->slot_count << std::endl;
+	std::cout << ", slot_count: " << this->slot_count;
+
+	if constexpr (UseDeltaTree)
+		std::cout << ", num_bytes_changed: " << this->num_bytes_changed;
+
+	std::cout << ":" << std::endl;
 
 	// Print Slots.
 	for (const auto *slot = slots_begin(); slot < slots_end(); ++slot) {
@@ -892,8 +937,8 @@ void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::print() {
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
-void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::compactify(
-	uint32_t page_size) {
+uint16_t
+BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::compactify(uint32_t page_size) {
 	// Collect all slot pointers.
 	std::vector<LeafSlot *> slots;
 	for (auto *slot = slots_begin(); slot < slots_end(); ++slot) {
@@ -918,7 +963,10 @@ void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::compactify(
 	}
 
 	// Update data_start.
+	assert(target_offset >= this->data_start);
+	uint16_t saved_space = target_offset - this->data_start;
 	this->data_start = target_offset;
+	return saved_space;
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>

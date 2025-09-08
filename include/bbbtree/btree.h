@@ -145,10 +145,20 @@ struct BTree : public Segment {
 		const uint16_t level;
 		/// The number of entries.
 		uint16_t slot_count;
+		/// Tracks the degree of change on this page. Only when this tree is set
+		/// to `UseDeltaTree`. A high degree has a higher chance of being
+		/// written to disk on eviction. Pages with low write amplification are
+		/// more likely to be buffered the delta tree.
+		/// TODO: Reset this value when going to disk.
+		std::conditional_t<UseDeltaTree, uint16_t, EmptyStruct>
+			num_bytes_changed;
 
 		/// Constructor.
 		Node(uint32_t page_size, uint16_t level)
-			: data_start(page_size), level(level), slot_count(0) {}
+			: data_start(page_size), level(level), slot_count(0) {
+			if constexpr (UseDeltaTree)
+				num_bytes_changed = 0;
+		}
 
 		/// Is the node a leaf node?
 		bool is_leaf() const { return level == 0; }
@@ -184,10 +194,15 @@ struct BTree : public Segment {
 		const std::byte *get_data() const {
 			return reinterpret_cast<const std::byte *>(this);
 		}
-
-		/// Casts a page's data into a Node.
-		static Node &get_node_from_page(char *page) {
-			return *reinterpret_cast<Node *>(page);
+		// Get the update ratio on this node.
+		uint16_t get_update_ratio(uint32_t page_size) const {
+			if constexpr (UseDeltaTree) {
+				assert(num_bytes_changed <= page_size);
+				return static_cast<uint32_t>(num_bytes_changed) * 100 /
+					   page_size;
+			}
+			throw std::logic_error("Cannot get update ratio on a BTree that "
+								   "does not track deltas.");
 		}
 	};
 
@@ -301,7 +316,7 @@ struct BTree : public Segment {
 		};
 
 		/// Moves all keys to the right.
-		void compactify(uint32_t page_size);
+		uint16_t compactify(uint32_t page_size);
 		/// Reduces the size of the node. `target_page_size` must be smaller
 		/// than `current_page_size`. All entries must fit `target_page_size`.
 		void shrink(uint32_t current_page_size, uint32_t target_page_size);
@@ -405,7 +420,7 @@ struct BTree : public Segment {
 		}
 
 		/// Moves all key-value pairs up to make space on the leaf.f
-		void compactify(uint32_t page_size);
+		uint16_t compactify(uint32_t page_size);
 		/// Reduces the size of the node. `target_page_size` must be smaller
 		/// than `current_page_size`.
 		void shrink(uint32_t current_page_size, uint32_t target_page_size);

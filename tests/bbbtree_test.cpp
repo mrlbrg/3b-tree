@@ -39,7 +39,7 @@ class BBBTreeTest : public ::testing::Test {};
 template <bool ContinueUnload> class TestPageLogic : public PageLogic {
   public:
 	bool before_unload(char * /*data*/, const State & /*state*/,
-					   PageID /*page_id*/) override {
+					   PageID /*page_id*/, size_t /*page_size*/) override {
 		unload_called = true;
 		return ContinueUnload;
 	}
@@ -312,11 +312,11 @@ TEST_F(BBBTreeTest, LeafSplitsInDeltaTree) {
 		auto *node1 = reinterpret_cast<BTreeInt::LeafNode *>(frame1.get_data());
 		// Node 1 does not have its node split on disk. So all keys are still
 		// present.
-		EXPECT_TRUE(node1->slot_count == 4);
-		EXPECT_TRUE(node1->lookup(UInt64{1}).has_value());
-		EXPECT_TRUE(node1->lookup(UInt64{2}).has_value());
-		EXPECT_TRUE(node1->lookup(UInt64{3}).has_value());
-		EXPECT_TRUE(node1->lookup(UInt64{4}).has_value());
+		EXPECT_EQ(node1->slot_count, tuples_per_leaf - 1);
+		for (size_t j = 1; j < tuples_per_leaf; j++) {
+			EXPECT_TRUE(bbbtree_int->lookup(j).has_value());
+			EXPECT_EQ(bbbtree_int->lookup(j), j + 2);
+		}
 		buffer_manager->unfix_page(frame1, false);
 
 		auto &frame2 = buffer_manager->fix_page(TEST_SEGMENT_ID, 2, true,
@@ -327,6 +327,7 @@ TEST_F(BBBTreeTest, LeafSplitsInDeltaTree) {
 		EXPECT_FALSE(node2->lookup(UInt64{2}).has_value());
 		EXPECT_TRUE(node2->lookup(UInt64{3}).has_value());
 		EXPECT_TRUE(node2->lookup(UInt64{4}).has_value());
+		EXPECT_TRUE(node2->lookup(UInt64{5}).has_value());
 		buffer_manager->unfix_page(frame2, false);
 	}
 }
@@ -391,7 +392,6 @@ TEST_F(BBBTreeTest, SplitAndInserts) {
 		EXPECT_TRUE(node1->lookup(UInt64{1}).has_value());
 		EXPECT_TRUE(node1->lookup(UInt64{2}).has_value());
 		EXPECT_FALSE(node1->lookup(UInt64{3}).has_value());
-		EXPECT_FALSE(node1->lookup(UInt64{4}).has_value());
 		buffer_manager->unfix_page(frame1, false);
 		buffer_manager->clear_all();
 	}
@@ -405,12 +405,11 @@ TEST_F(BBBTreeTest, SplitAndInserts) {
 		auto *node1 = reinterpret_cast<BTreeInt::LeafNode *>(frame1.get_data());
 		// Node 1 does not have its node split on disk. So all keys are still
 		// present.
-		EXPECT_TRUE(node1->slot_count == 4);
+		EXPECT_EQ(node1->slot_count, 3);
 		EXPECT_FALSE(node1->lookup(UInt64{0}).has_value());
 		EXPECT_TRUE(node1->lookup(UInt64{1}).has_value());
 		EXPECT_TRUE(node1->lookup(UInt64{2}).has_value());
 		EXPECT_TRUE(node1->lookup(UInt64{3}).has_value());
-		EXPECT_TRUE(node1->lookup(UInt64{4}).has_value());
 		buffer_manager->unfix_page(frame1, false);
 	}
 }

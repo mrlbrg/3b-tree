@@ -10,23 +10,29 @@ namespace bbbtree {
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
 bool DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
-											PageID page_id) {
+											PageID page_id, size_t page_size) {
 	// TODO: When we return true to continue to write out because
 	// write amplification is low,
 	// we must clean the slots of their dirty state too.
 	// TODO: When the page is actually written out, we need to erase it from
-	// the delta tree.
+	// the delta tree and set the `num_bytes_changed` on the node to 0.
 
 	// Clean the slots of their dirty state when writing the node out.
-	if (state == State::NEW) {
+	auto *node = reinterpret_cast<const Node *>(data);
+	// New pages are always written out.
+	// Pages with many updates are always written out.
+	bool force_write_out =
+		(state == State::NEW) ||
+		(node->get_update_ratio(page_size) > UPDATE_RATIO_THRESHOLD);
+	if (force_write_out) {
 		clean_node(reinterpret_cast<Node *>(data));
 		return true;
 	}
-
 	assert(state == State::DIRTY);
+	assert(node->get_update_ratio(page_size) > 0);
 
 	// TODO: Do not erase when there is nothing. Just allow making an insert
-	// that updates the value if the key exists already.
+	// that updates the value if the key exists already i.e. upsert.
 	this->erase(page_id);
 
 	//  Scan all slots in the node and insert the deltas in the delta tree.
@@ -63,6 +69,7 @@ void DeltaTree<KeyT, ValueT>::after_load(char *data, PageID page_id) {
 template <KeyIndexable KeyT, ValueIndexable ValueT>
 template <typename NodeT>
 void DeltaTree<KeyT, ValueT>::clean_node(NodeT *node) {
+	node->num_bytes_changed = 0;
 	for (auto *slot = node->slots_begin(); slot < node->slots_end(); ++slot)
 		slot->state = OperationType::Unchanged;
 }

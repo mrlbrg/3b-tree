@@ -46,10 +46,11 @@ void BufferManager::unload(BufferFrame &frame) {
 	// Sanity Check: Caller must ensure that page needs to be unloaded.
 	assert(frame.state == State::DIRTY || frame.state == State::NEW);
 
-	auto continue_unload = frame.page_logic
-							   ? frame.page_logic->before_unload(
-									 frame.data, frame.state, frame.page_id)
-							   : true;
+	auto continue_unload =
+		frame.page_logic
+			? frame.page_logic->before_unload(frame.data, frame.state,
+											  frame.page_id, page_size)
+			: true;
 
 	if (!continue_unload)
 		return; // Unload is cancelled.
@@ -209,18 +210,15 @@ File &BufferManager::get_segment(SegmentID segment_id) {
 // ------------------------------------------------------------------
 void BufferManager::clear_all() {
 restart:
-	free_buffer_frames.clear();
-	for (auto &frame : page_frames) {
-		if (frame.state == State::UNDEFINED)
-			continue;
-		remove(frame);
+	for (const auto &[page_id, frame] : id_to_frame) {
+		remove(*frame);
 	}
 	// During `unload` of BTree nodes, some pages might have been loaded
 	// into the buffer to store the deltas. Therefore we might have to go
 	// another round to also clear all delta tree pages from the buffer.
-	if (free_buffer_frames.size() != page_frames.size())
+	if (!id_to_frame.empty())
 		goto restart;
-	assert(id_to_frame.empty());
+	assert(free_buffer_frames.size() == page_frames.size());
 }
 // ------------------------------------------------------------------
 } // namespace bbbtree

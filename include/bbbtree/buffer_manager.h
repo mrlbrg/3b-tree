@@ -28,8 +28,8 @@ class PageLogic {
 	/// The function to call before a dirty page is unloaded.
 	/// Is not called when the page is new.
 	/// Returns true when the unload should proceed to disk.
-	virtual bool before_unload(char *data, const State &state,
-							   PageID page_id) = 0;
+	virtual bool before_unload(char *data, const State &state, PageID page_id,
+							   size_t page_size) = 0;
 	/// The function to call after the page was loaded from disk.
 	virtual void after_load(char *data, PageID page_id) = 0;
 	/// Virtual destructor.
