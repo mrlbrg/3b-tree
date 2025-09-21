@@ -300,6 +300,8 @@ void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 std::ostream &operator<<(std::ostream &os,
 						 const BTree<KeyT, ValueT, UseDeltaTree> &type) {
+
+	auto size = type.size();
 	// Acquire root to get height of tree.
 	auto &root_frame = type.buffer_manager.fix_page(type.segment_id, type.root,
 													false, type.page_logic);
@@ -310,6 +312,7 @@ std::ostream &operator<<(std::ostream &os,
 	type.buffer_manager.unfix_page(root_frame, false);
 
 	os << std::endl;
+	os << "size: " << size << std::endl;
 	os << "root: " << type.root << std::endl;
 	os << "next_free_page: " << type.next_free_page << std::endl;
 
@@ -377,7 +380,7 @@ std::ostream &operator<<(std::ostream &os,
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
-size_t BTree<KeyT, ValueT, UseDeltaTree>::size() {
+size_t BTree<KeyT, ValueT, UseDeltaTree>::size() const {
 	// Acquire root to get height of tree.
 	auto &root_frame =
 		buffer_manager.fix_page(segment_id, root, false, page_logic);

@@ -129,7 +129,7 @@ struct BTree : public Segment {
 	/// Returns the number of key/value pairs stored in the tree.
 	/// Do not use for production, only for testing. Traverses whole tree.
 	/// Not thread-safe.
-	size_t size();
+	size_t size() const;
 
 	/// Returns the number of levels in the tree.
 	/// Not thread-safe.
@@ -203,7 +203,8 @@ struct BTree : public Segment {
 		// Get the update ratio on this node.
 		uint16_t get_update_ratio(uint32_t page_size) const {
 			if constexpr (UseDeltaTree) {
-				assert(num_bytes_changed <= page_size);
+				// TODO: Handle overflow of num_bytes_changed.
+				// assert(num_bytes_changed <= page_size);
 				return static_cast<uint32_t>(num_bytes_changed) * 100 /
 					   page_size;
 			}

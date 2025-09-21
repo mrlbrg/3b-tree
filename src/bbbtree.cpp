@@ -1,6 +1,7 @@
 #include "bbbtree/bbbtree.h"
 #include "bbbtree/btree.h"
 #include "bbbtree/buffer_manager.h"
+#include "bbbtree/logger.h"
 #include "bbbtree/stats.h"
 
 #include <cstdint>
@@ -9,25 +10,49 @@
 namespace bbbtree {
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
-bool DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
-											PageID page_id, size_t page_size) {
+std::pair<bool, bool>
+DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
+									   PageID page_id, size_t page_size) {
 	// TODO: When we return true to continue to write out because
 	// write amplification is low,
 	// we must clean the slots of their dirty state too.
 	// TODO: When the page is actually written out, we need to erase it from
 	// the delta tree and set the `num_bytes_changed` on the node to 0.
+	logger.log("DeltaTree::before_unload(): page " + std::to_string(page_id) +
+			   " state " +
+			   (state == State::DIRTY
+					? "DIRTY"
+					: (state == State::NEW ? "NEW" : "CLEAN")));
+	if (is_locked)
+		// throw std::logic_error("DeltaTree::before_unload(): Re-entrant
+		// call");
+		return {false, false}; // Do not allow unload when already
+							   // locked.
+
+	is_locked = true;
 
 	// Clean the slots of their dirty state when writing the node out.
 	auto *node = reinterpret_cast<const Node *>(data);
 	// New pages are always written out.
 	// Pages with many updates are always written out.
-	bool force_write_out =
-		(state == State::NEW) ||
-		(node->get_update_ratio(page_size) > UPDATE_RATIO_THRESHOLD);
+	bool has_many_updates =
+		node->get_update_ratio(page_size) > UPDATE_RATIO_THRESHOLD;
+	bool is_new = (state == State::NEW);
+	bool force_write_out = is_new || has_many_updates;
+
+	// Erase any buffered deltas for this page, since we are going to write it
+	// out now.
+	if (has_many_updates)
+		this->erase(page_id);
+
+	// Remove any tracking information on the node, since we are going to write
+	// it out now.
 	if (force_write_out) {
 		clean_node(reinterpret_cast<Node *>(data));
-		return true;
+		is_locked = false;
+		return {true, true};
 	}
+
 	assert(state == State::DIRTY);
 	assert(node->num_bytes_changed > 0);
 
@@ -37,18 +62,25 @@ bool DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
 
 	//  Scan all slots in the node and insert the deltas in the delta tree.
 	store_deltas(page_id, reinterpret_cast<const Node *>(data));
+	is_locked = false;
 
 	++stats.pages_write_deferred;
-	return false;
+	return {true, false};
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
 void DeltaTree<KeyT, ValueT>::after_load(char *data, PageID page_id) {
+	// TODO: Return if after_load
+	assert(!is_locked);
+
+	is_locked = true;
 	// Load the deltas for this page
 	auto maybe_deltas = this->lookup(page_id);
 	// No deltas found. Do nothing.
-	if (!maybe_deltas.has_value())
+	if (!maybe_deltas.has_value()) {
+		is_locked = false;
 		return;
+	}
 
 	// Apply the deltas to the node.
 	auto deltas = maybe_deltas.value();
@@ -63,6 +95,8 @@ void DeltaTree<KeyT, ValueT>::after_load(char *data, PageID page_id) {
 					 deltas.slot_count);
 		inner_node->upper = deltas.upper;
 	}
+
+	is_locked = false;
 }
 
 // -----------------------------------------------------------------
@@ -182,7 +216,8 @@ void DeltaTree<KeyT, ValueT>::apply_deltas(NodeT *node, const DeltasT &deltas,
 		if (node->has_space(entry.key, entry.value)) {
 			apply_delta(deltas[i], node);
 		} else {
-			// No space left. Apply the rest of the deltas out-of-place.
+			// No space left on the node. Apply the rest of the deltas
+			// out-of-place and compactify to fit the node again.
 			out_of_place_apply(this->buffer_manager.page_size, i);
 			return;
 		}
@@ -194,7 +229,7 @@ void DeltaTree<KeyT, ValueT>::apply_deltas(NodeT *node, const DeltasT &deltas,
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 std::ostream &operator<<(std::ostream &os,
-						 const BTree<KeyT, ValueT, UseDeltaTree> &type) {
+						 const BBBTree<KeyT, ValueT, UseDeltaTree> &type) {
 	os << "B-Tree:" << std::endl;
 	os << type.btree << std::endl;
 	os << "Delta Tree" << std::endl;
@@ -206,5 +241,7 @@ std::ostream &operator<<(std::ostream &os,
 // Explicit instantiations
 template class BBBTree<UInt64, TID>;
 template class BBBTree<String, TID>;
+template std::ostream &operator<<(std::ostream &, const BBBTree<UInt64, TID> &);
+template std::ostream &operator<<(std::ostream &, const BBBTree<String, TID> &);
 // -----------------------------------------------------------------
 } // namespace bbbtree

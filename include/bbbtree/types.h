@@ -38,6 +38,8 @@ struct UInt64 {
 	auto operator<=>(const UInt64 &) const = default;
 	/// Prints out value.
 	friend std::ostream &operator<<(std::ostream &os, const UInt64 &value);
+	/// Converts to string.
+	operator std::string() const { return std::to_string(value); }
 	/// Hashes the value.
 	friend struct std::hash<UInt64>;
 
@@ -74,6 +76,8 @@ struct TID {
 	auto operator<=>(const TID &) const = default;
 	/// Prints out value.
 	friend std::ostream &operator<<(std::ostream &os, const TID &value);
+	/// Converts to string.
+	operator std::string() const { return std::to_string(value); }
 	/// Hashes the value.
 	friend struct std::hash<TID>;
 
@@ -105,6 +109,8 @@ struct String {
 	auto operator<=>(const String &) const = default;
 	/// Prints out value.
 	friend std::ostream &operator<<(std::ostream &os, const String &value);
+	/// Converts to string.
+	operator std::string() const { return std::string(view); }
 	/// Hashes the value.
 	friend struct std::hash<String>;
 

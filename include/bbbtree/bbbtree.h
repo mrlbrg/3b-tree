@@ -6,7 +6,7 @@
 #include "bbbtree/types.h"
 
 #include <cstdint>
-#include <sys/types.h>
+#include <sstream>
 
 namespace bbbtree {
 
@@ -40,8 +40,11 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 
 	/// Scans the given BTree node for dirty entries and buffers them in the
 	/// delta tree.
-	bool before_unload(char *data, const State &state, PageID page_id,
-					   size_t page_size) override;
+	/// `first` returns true if unloading was successful.
+	// `second` returns true if the page should be written out to disk.
+	std::pair<bool, bool> before_unload(char *data, const State &state,
+										PageID page_id,
+										size_t page_size) override;
 	/// Looks up the deltas for the given node and applies them.
 	void after_load(char *data, PageID page_id) override;
 
@@ -61,6 +64,15 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 	void clean_node(Node *node);
 	/// Calls the correct extraction code for the node type.
 	void store_deltas(PageID page_id, const Node *node);
+
+	/// Locking mechanism to prevent re-entrant calls to (un)load functions.
+	/// When a page is unloaded/loaded (`before_unload`), we must prevent a
+	/// subcall to unload as well to make space for the delta tree nodes.
+	/// Therefore we lock the delta tree during load and unload.
+	/// When calling `before_unload`, while the tree is locked, we return false
+	/// to indicate that this node cannot be evicted at this time.
+	/// During `after_load`, the tree should never be locked.
+	bool is_locked = false;
 };
 // -----------------------------------------------------------------
 /// A B-Tree that can buffer its deltas. Cannot just inherit from `BTree`
@@ -93,6 +105,12 @@ class BBBTree {
 	friend std::ostream &
 	operator<< <>(std::ostream &os,
 				  const BBBTree<KeyT, ValueT, UseDeltaTree> &tree);
+	/// Converts the tree to a string.
+	operator std::string() const {
+		std::stringstream ss;
+		ss << *this;
+		return ss.str();
+	}
 
   protected:
 	/// The delta tree that stores changes to entries of the `btree` nodes,

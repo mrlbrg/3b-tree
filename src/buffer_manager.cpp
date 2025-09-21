@@ -1,6 +1,8 @@
 // -----------------------------------------------------------------
 #include "bbbtree/buffer_manager.h"
+#include "bbbtree/logger.h"
 #include "bbbtree/stats.h"
+#include "bbbtree/types.h"
 // -----------------------------------------------------------------
 #include <cassert>
 #include <cstdlib>
@@ -42,18 +44,22 @@ void BufferManager::reset(BufferFrame &frame) {
 	frame.page_logic = nullptr;
 }
 // ----------------------------------------------------------------
-void BufferManager::unload(BufferFrame &frame) {
+bool BufferManager::unload(BufferFrame &frame) {
 	// Sanity Check: Caller must ensure that page needs to be unloaded.
 	assert(frame.state == State::DIRTY || frame.state == State::NEW);
 
-	auto continue_unload =
+	auto [success, continue_unload] =
 		frame.page_logic
 			? frame.page_logic->before_unload(frame.data, frame.state,
 											  frame.page_id, page_size)
-			: true;
+			: std::make_pair(true, true);
+
+	if (!success)
+		return false; // Unload is not allowed for this frame. Probably because
+					  // the delta tree is locked currently.
 
 	if (!continue_unload)
-		return; // Unload is cancelled.
+		return true; // Unload is not continued.
 
 	size_t page_begin = frame.page_id * page_size;
 	size_t page_end = page_begin + page_size;
@@ -67,6 +73,8 @@ void BufferManager::unload(BufferFrame &frame) {
 	file.write_block(frame.data, page_begin, page_size);
 	stats.bytes_written_physically += page_size;
 	stats.pages_written += 1;
+
+	return true;
 }
 // -----------------------------------------------------------------
 void BufferManager::load(BufferFrame &frame, SegmentID segment_id,
@@ -97,6 +105,9 @@ void BufferManager::load(BufferFrame &frame, SegmentID segment_id,
 BufferFrame &BufferManager::fix_page(SegmentID segment_id, PageID page_id,
 									 bool /*exclusive*/,
 									 PageLogic *page_logic) {
+	logger.log("Fixing page " + std::to_string(segment_id) + "." +
+			   std::to_string(page_id) + " {");
+	++logger;
 	// Sanity Check
 	assert((page_id & 0xFFFF000000000000ULL) == 0);
 
@@ -104,19 +115,30 @@ BufferFrame &BufferManager::fix_page(SegmentID segment_id, PageID page_id,
 	auto frame_it = id_to_frame.find(segment_page_id);
 	// Page already buffered?
 	if (frame_it != id_to_frame.end()) {
+		logger.log("Page already in buffer.");
 		// TODO: Already used by someone else?
 		auto &frame = frame_it->second;
 		++(frame->in_use_by);
+		--logger;
+		logger.log("}");
 		return *(frame_it->second);
 	}
 
 	// Load page into buffer
 	auto &frame = get_free_frame();
 	assert(frame.in_use_by == 0);
+	assert(frame.page_logic == nullptr);
 	id_to_frame[segment_page_id] = &frame;
 	frame.in_use_by = 1;
 	frame.page_logic = page_logic;
+	logger.log("Loading page into buffer.");
 	load(frame, segment_id, page_id);
+	logger.log(*this);
+
+	assert(validate());
+
+	--logger;
+	logger.log("}");
 
 	return frame;
 }
@@ -131,41 +153,62 @@ void BufferManager::unfix_page(BufferFrame &frame, bool is_dirty) {
 	--frame.in_use_by;
 }
 // ----------------------------------------------------------------
-void BufferManager::remove(BufferFrame &frame) {
+bool BufferManager::remove(BufferFrame &frame) {
 	// Sanity Check: Must not be in use.
 	assert(frame.in_use_by == 0);
+	if (frame.state == State::DIRTY || frame.state == State::NEW) {
+		frame.in_use_by = 1; // Prevent recursive eviction.
+		auto success = unload(frame);
+		frame.in_use_by = 0;
+		if (!success)
+			return false;
+	}
+	// Remove from directory.
 	auto segment_page_id =
 		frame.page_id ^ (static_cast<uint64_t>(frame.segment_id) << 48);
-	// Write dirty pages out.
-	if (frame.state == State::DIRTY || frame.state == State::NEW)
-		unload(frame);
-	// Remove from directory.
-	id_to_frame.erase(segment_page_id);
+	auto num_removed = id_to_frame.erase(segment_page_id);
+	assert(num_removed == 1);
 	// Release frame.
 	reset(frame);
 	free_buffer_frames.push_back(&frame);
 	++stats.pages_evicted;
+
+	return true;
 }
 // ----------------------------------------------------------------
 bool BufferManager::evict() {
+	logger.log("Buffer full, evicting a page...");
+	logger.log(*this);
+	assert(validate());
 	// Select random page for eviction.
-	int i = std::rand() % page_frames.size();
+	size_t i = std::rand() % page_frames.size();
 	auto *frame = &(page_frames[i]);
 	uint8_t num_frames_tested = 0;
 
 	// Find a page that is not in use from there.
-	while (frame->in_use_by) {
+	while (true) {
+		if (!frame->in_use_by) {
+			logger.log("Evicting page " + std::to_string(frame->segment_id) +
+					   "." + std::to_string(frame->page_id));
+			logger.log(*frame);
+
+			// Try to remove the page.
+			auto success = remove(*frame);
+			if (success)
+				break;
+			logger.log("Could not evict page because unload was not allowed by "
+					   "page logic.");
+		}
+
 		// Stop when having scanned all frames already.
 		++num_frames_tested;
 		if (num_frames_tested == page_frames.size())
 			return false;
 
 		// Otherwise try next page.
-		i = (i + 1) % page_frames.size();
+		i = ((i + 1) < page_frames.size()) ? (i + 1) : 0;
 		frame = &(page_frames[i]);
 	}
-
-	remove(*frame);
 
 	return true;
 }
@@ -181,6 +224,7 @@ BufferFrame &BufferManager::get_free_frame() {
 	}
 
 	// Sanity check
+	assert(validate());
 	assert(!free_buffer_frames.empty());
 
 	auto &frame = *(free_buffer_frames.back());
@@ -211,7 +255,8 @@ File &BufferManager::get_segment(SegmentID segment_id) {
 void BufferManager::clear_all() {
 restart:
 	for (const auto &[page_id, frame] : id_to_frame) {
-		remove(*frame);
+		auto success = remove(*frame);
+		assert(success);
 	}
 	// During `unload` of BTree nodes, some pages might have been loaded
 	// into the buffer to store the deltas. Therefore we might have to go
@@ -219,6 +264,42 @@ restart:
 	if (!id_to_frame.empty())
 		goto restart;
 	assert(free_buffer_frames.size() == page_frames.size());
+}
+// ------------------------------------------------------------------
+bool BufferManager::validate() const {
+
+	// Check that the number of free frames and used frames adds up to the
+	// total number of frames.
+	if (free_buffer_frames.size() + id_to_frame.size() != page_frames.size()) {
+		logger.log("Validating BufferManager...");
+		logger.log("Inconsistent state: free_buffer_frames.size() + "
+				   "id_to_frame.size() != page_frames.size()");
+		logger.log(*this);
+		return false;
+	}
+
+	// Check that all frames in mapping table are defined and have the
+	// correct segment_id and page_id as the frames their mapping to.
+	for (auto [page_id, frame_ptr] : id_to_frame) {
+		if (frame_ptr->state == State::UNDEFINED) {
+			logger.log("Validating BufferManager...");
+			logger.log("Inconsistent state: page " + std::to_string(page_id) +
+					   " is in id_to_frame but UNDEFINED");
+			logger.log(*this);
+			return false;
+		}
+		SegmentID segment_id = static_cast<SegmentID>(page_id >> 48);
+		PageID pid = page_id & 0x0000FFFFFFFFFFFFULL;
+		if (frame_ptr->segment_id != segment_id || frame_ptr->page_id != pid) {
+			logger.log("Validating BufferManager...");
+			logger.log("Inconsistent state: page " +
+					   std::to_string(segment_id) + "." + std::to_string(pid) +
+					   " has wrong segment_id or page_id");
+			logger.log(*this);
+			return false;
+		}
+	}
+	return true;
 }
 // ------------------------------------------------------------------
 } // namespace bbbtree
