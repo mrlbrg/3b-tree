@@ -19,4 +19,5 @@ set(
     include/bbbtree/file.h 
     include/bbbtree/types.h
     include/bbbtree/stats.h
+    include/bbbtree/logger.h
 )

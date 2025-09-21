@@ -18,6 +18,7 @@ set(
     src/map.cpp
     src/stats.cpp
     src/types.cpp
+    src/logger.cpp
 )
 if(UNIX)
     set(SRC_CC ${SRC_CC} src/file/posix_file.cc)
