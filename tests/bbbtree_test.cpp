@@ -1,5 +1,7 @@
 #include "bbbtree/bbbtree.h"
+#include "bbbtree/btree.h"
 #include "bbbtree/buffer_manager.h"
+#include "bbbtree/logger.h"
 #include "bbbtree/stats.h"
 #include "bbbtree/types.h"
 
@@ -17,11 +19,10 @@ using DeltaTreeInt = DeltaTree<UInt64, TID>;
 // -----------------------------------------------------------------
 static const constexpr SegmentID TEST_SEGMENT_ID = 834;
 static const constexpr size_t TEST_PAGE_SIZE = 128;
-static const constexpr size_t TEST_NUM_PAGES = 5;
+static const constexpr size_t TEST_NUM_PAGES = 10;
 // -----------------------------------------------------------------
 static std::vector<std::byte> get_random_bytes(size_t num_bytes) {
-	static std::random_device rd;  // Seed
-	static std::mt19937 gen(rd()); // Mersenne Twister engine
+	static std::mt19937 gen(42); // Mersenne Twister engine
 	static std::uniform_int_distribution<uint8_t> dist(65, 90);
 
 	std::vector<std::byte> res;
@@ -38,10 +39,12 @@ class BBBTreeTest : public ::testing::Test {};
 // A dummy page logic that is used to test the callbacks of the buffer manager.
 template <bool ContinueUnload> class TestPageLogic : public PageLogic {
   public:
-	bool before_unload(char * /*data*/, const State & /*state*/,
-					   PageID /*page_id*/, size_t /*page_size*/) override {
+	std::pair<bool, bool> before_unload(char * /*data*/,
+										const State & /*state*/,
+										PageID /*page_id*/,
+										size_t /*page_size*/) override {
 		unload_called = true;
-		return ContinueUnload;
+		return {true, ContinueUnload};
 	}
 	void after_load(char * /*data*/, PageID /*page_id*/) override {
 		load_called = true;
@@ -650,6 +653,7 @@ struct SeedableTree : public IndexT<KeyT, ValueT> {
 	/// @insert_size: the number of bytes to be inserted in total.
 	/// @min_size: the minimum number of bytes an inserted key should have.
 	void seed(size_t insert_size, size_t min_size = 1) {
+
 		auto get_kv_size = [min_size]() -> std::pair<uint16_t, uint16_t> {
 			static std::random_device rd;
 			static std::mt19937 gen(rd());
@@ -679,6 +683,9 @@ struct SeedableTree : public IndexT<KeyT, ValueT> {
 			return {key_size, value_size};
 		};
 
+		log_all("Seeding tree with up to " + std::to_string(insert_size) +
+				" bytes.");
+
 		size_t num_bytes = 0;
 		while (num_bytes < insert_size) {
 			// Get random key and value.
@@ -693,17 +700,61 @@ struct SeedableTree : public IndexT<KeyT, ValueT> {
 
 			// Insert into tree.
 			if (expected_map.count(key) == 0) {
+				log("-- Inserting key " + std::string(key) + " with value " +
+					std::string(value) + " (" +
+					std::to_string(key_size + value_size) + " bytes)");
+
 				bool success = this->insert(key, value);
+
+				if (!success) {
+					log_all("---- FAILED INSERTION");
+				}
+
 				assert(success);
 				expected_map[key] = value;
 				assert(expected_map.size() == this->size());
 				num_bytes += key_size + value_size;
 				assert(this->height() < PageSize);
 			} else {
+
+				log("-- Not inserting key " + std::string(key) +
+					" with value " + std::string(value) + " (" +
+					std::to_string(key_size + value_size) +
+					" bytes). Key already exists.");
+
+				if (!(this->insert(key, value) == false)) {
+					log_all("---- INSERTION SHOULD FAIL BUT DID NOT");
+				}
+
 				assert(this->insert(key, value) == false);
 				data.pop_back();
 			}
+			// log_all();
 		}
+	}
+
+	void log(const std::string &msg) { logger.log(msg); }
+
+	using IndexT<KeyT, ValueT>::operator std::string;
+
+	void log_all(const std::string &msg = "") {
+		auto map_to_string = [&]() -> std::string {
+			std::stringstream ss;
+			ss << "expected_map {";
+			bool first = true;
+			for (const auto &[key, value] : expected_map) {
+				if (!first)
+					ss << ", ";
+				ss << std::string(key) << ": " << std::string(value);
+				first = false;
+			}
+			ss << "}";
+			return ss.str();
+		};
+
+		log(msg);
+		logger.log(std::string(*this));
+		logger.log(map_to_string());
 	}
 
 	/// Validates that all previously `seed`ed key/value pairs are still
@@ -737,6 +788,7 @@ struct SeedableTree : public IndexT<KeyT, ValueT> {
 };
 // A large tree can handle all kinds of deltas.
 TEST_F(BBBTreeTest, LargeIntTree) {
+	std::srand(42);
 	static const constexpr size_t page_size = 128;
 
 	std::unique_ptr<BufferManager> buffer_manager =

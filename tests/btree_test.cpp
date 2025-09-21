@@ -20,8 +20,7 @@ static const constexpr size_t TEST_NUM_PAGES = 50;
 static const constexpr size_t BUFFER_SIZE = TEST_PAGE_SIZE * TEST_NUM_PAGES;
 
 static std::vector<std::byte> get_random_bytes(size_t num_bytes) {
-	static std::random_device rd;  // Seed
-	static std::mt19937 gen(rd()); // Mersenne Twister engine
+	static std::mt19937 gen(42); // Mersenne Twister engine
 	static std::uniform_int_distribution<uint8_t> dist(65, 90);
 
 	std::vector<std::byte> res;
