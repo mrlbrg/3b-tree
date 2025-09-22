@@ -719,9 +719,8 @@ uint16_t
 BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::compactify(uint32_t page_size) {
 	// Collect all slot pointers.
 	std::vector<Pivot *> slots;
-	for (auto *slot = slots_begin(); slot < slots_end(); ++slot) {
+	for (auto *slot = slots_begin(); slot < slots_end(); ++slot)
 		slots.push_back(slot);
-	}
 
 	// Sort them by their offset with the biggest offset first.
 	std::sort(slots.begin(), slots.end(), [](const Pivot *a, const Pivot *b) {
@@ -739,7 +738,8 @@ BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::compactify(uint32_t page_size) {
 	}
 
 	// Update data_start.
-	assert(target_offset > this->data_start);
+	assert(target_offset >=
+		   this->data_start); // Can also have no space savings.
 	uint16_t saved_space = target_offset - this->data_start;
 	this->data_start = target_offset;
 

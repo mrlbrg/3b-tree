@@ -200,6 +200,7 @@ void DeltaTree<KeyT, ValueT>::apply_deltas(NodeT *node, const DeltasT &deltas,
 			apply_delta(deltas[i], buffered_node);
 		// Cut off all split slots.
 		buffered_node->slot_count = slot_count;
+		// Have to compactify again to make sure everything fits when shrinking.
 		buffered_node->compactify(buffer.size());
 		// Shrink node to original size.
 		buffered_node->shrink(buffer.size(), page_size);
