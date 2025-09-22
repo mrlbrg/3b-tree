@@ -30,7 +30,7 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 
 	// Every update ratio of a node smaller than this value will be buffered in
 	// the delta tree instead of written out.
-	static const constexpr uint16_t UPDATE_RATIO_THRESHOLD = 100;
+	static const constexpr uint16_t UPDATE_RATIO_THRESHOLD = 50;
 
   public:
 	/// Constructor.
