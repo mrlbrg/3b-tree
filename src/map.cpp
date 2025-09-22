@@ -15,7 +15,8 @@ std::optional<ValueT> Map<KeyT, ValueT, UseDeltaTree>::lookup(const KeyT &key) {
 }
 // -----------------------------------------------------------------
 template <typename KeyT, typename ValueT, bool UseDeltaTree>
-void Map<KeyT, ValueT, UseDeltaTree>::erase(const KeyT &key) {
+void Map<KeyT, ValueT, UseDeltaTree>::erase(const KeyT &key,
+											size_t /*page_size*/) {
 	map.erase(key);
 }
 // -----------------------------------------------------------------

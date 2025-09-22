@@ -30,12 +30,12 @@ static const constexpr SegmentID DELTA_SEGMENT_ID = 3;
 /// TIDs.
 template <template <typename, typename, bool = false> class IndexT,
 		  typename KeyT>
-concept IndexInterface =
-	requires(IndexT<KeyT, TID> index, const KeyT &key, const TID &value) {
-		{ index.lookup(key) } -> std::same_as<std::optional<TID>>;
-		{ index.erase(key) } -> std::same_as<void>;
-		{ index.insert(key, value) } -> std::same_as<bool>;
-	};
+concept IndexInterface = requires(IndexT<KeyT, TID> index, const KeyT &key,
+								  const TID &value, size_t page_size) {
+	{ index.lookup(key) } -> std::same_as<std::optional<TID>>;
+	{ index.erase(key, page_size) } -> std::same_as<void>;
+	{ index.insert(key, value) } -> std::same_as<bool>;
+};
 
 /// A Database maintains a single table of keys and values. The schema is
 /// fixated at compile-time. It is templated on its index, which maps `KeyT` to

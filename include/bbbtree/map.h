@@ -21,7 +21,7 @@ template <typename KeyT, typename ValueT, bool UseDeltaTree = false> class Map {
 	/// found.
 	std::optional<ValueT> lookup(const KeyT &key);
 	/// Erase an entry in the tree.
-	void erase(const KeyT &key);
+	void erase(const KeyT &key, size_t page_size);
 	/// Inserts a new entry into the tree. Returns false if key already exists.
 	[[nodiscard]] bool insert(const KeyT &key, const ValueT &value);
 	/// The number of values stored in the map.

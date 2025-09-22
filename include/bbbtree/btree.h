@@ -118,7 +118,7 @@ struct BTree : public Segment {
 	std::optional<ValueT> lookup(const KeyT &key);
 
 	/// Erase an entry in the tree.
-	void erase(const KeyT &key);
+	void erase(const KeyT &key, size_t page_size);
 
 	/// Inserts a new entry into the tree. Returns false if key already exists.
 	[[nodiscard]] bool insert(const KeyT &key, const ValueT &value);
@@ -386,7 +386,7 @@ struct BTree : public Segment {
 
 		/// Erases the key/value pair for the given key. Returns true if the
 		/// key was found and removed. Otherwise false.
-		bool erase(const KeyT &key);
+		bool erase(const KeyT &key, size_t page_size);
 
 		/// Splits the leaf and returns the resulting pivotal key to be inserted
 		/// into the parent. `this` leaf is guaranteed to be the left node and
@@ -463,6 +463,13 @@ struct BTree : public Segment {
 	/// Prints the tree.
 	friend std::ostream &
 	operator<< <>(std::ostream &, const BTree<KeyT, ValueT, UseDeltaTree> &);
+
+	/// Converts to string.
+	operator std::string() const {
+		std::stringstream ss;
+		ss << *this;
+		return ss.str();
+	}
 };
 // -----------------------------------------------------------------
 } // namespace bbbtree

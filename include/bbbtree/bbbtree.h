@@ -95,7 +95,9 @@ class BBBTree {
 		return btree.insert(key, value);
 	}
 	/// Erase an entry in the tree.
-	inline void erase(const KeyT &key) { btree.erase(key); }
+	inline void erase(const KeyT &key, size_t page_size) {
+		btree.erase(key, page_size);
+	}
 
 	inline size_t size() { return btree.size(); }
 

@@ -1,6 +1,7 @@
 #include "bbbtree/btree.h"
 #include "bbbtree/buffer_manager.h"
 #include "bbbtree/delta.h"
+#include "bbbtree/logger.h"
 #include "bbbtree/stats.h"
 #include "bbbtree/types.h"
 
@@ -75,14 +76,15 @@ BTree<KeyT, ValueT, UseDeltaTree>::lookup(const KeyT &key) {
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
-void BTree<KeyT, ValueT, UseDeltaTree>::erase(const KeyT &key) {
+void BTree<KeyT, ValueT, UseDeltaTree>::erase(const KeyT &key,
+											  size_t page_size) {
 	assert(!UseDeltaTree && "Erase not supported with delta tree yet.");
 
 	auto &leaf_frame = get_leaf(key, true);
 	auto &leaf = *reinterpret_cast<LeafNode *>(leaf_frame.get_data());
 
 	// TODO: Not thread-safe.
-	leaf.erase(key);
+	leaf.erase(key, page_size);
 
 	buffer_manager.unfix_page(leaf_frame, true);
 }
@@ -174,8 +176,10 @@ template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 											  const ValueT &value) {
 	using Pivot = std::pair<const KeyT, const PageID>;
+	logger.log("### Splitting node to insert key " + std::string(key));
 	// No frames are to be held at this point.
 	while (true) {
+		logger.log("Before split:\n" + std::string(*this));
 		auto *curr_frame =
 			&buffer_manager.fix_page(segment_id, root, true, page_logic);
 		auto *curr_node = reinterpret_cast<InnerNode *>(curr_frame->get_data());
@@ -295,6 +299,7 @@ void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 			// Don't mark dirty here. Done while splitting.
 			buffer_manager.unfix_page(*frame, false);
 	}
+	logger.log("After split:\n" + std::string(*this));
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
@@ -896,7 +901,8 @@ void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::update(
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
-bool BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::erase(const KeyT &key) {
+bool BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::erase(const KeyT &key,
+														size_t page_size) {
 	auto *slot = lower_bound(key);
 
 	// Key not found.
@@ -919,6 +925,12 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::erase(const KeyT &key) {
 		*s = std::move(*(s + 1));
 	}
 	--this->slot_count;
+
+	// TODO: Cheap compactification.
+	// However, we might want to track potential free space on nodes instead and
+	// perform compactification when it makes a new insert fit instead.
+	if (this->slot_count == 0)
+		this->data_start = page_size;
 
 	return true;
 }

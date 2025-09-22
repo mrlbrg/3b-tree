@@ -43,7 +43,7 @@ DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
 	// Erase any buffered deltas for this page, since we are going to write it
 	// out now.
 	if (has_many_updates)
-		this->erase(page_id);
+		this->erase(page_id, page_size);
 
 	// Remove any tracking information on the node, since we are going to write
 	// it out now.
@@ -58,7 +58,7 @@ DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
 
 	// TODO: Do not erase when there is nothing. Just allow making an insert
 	// that updates the value if the key exists already i.e. upsert.
-	this->erase(page_id);
+	this->erase(page_id, page_size);
 
 	//  Scan all slots in the node and insert the deltas in the delta tree.
 	store_deltas(page_id, reinterpret_cast<const Node *>(data));
