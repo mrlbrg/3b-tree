@@ -18,11 +18,9 @@ DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
 	// we must clean the slots of their dirty state too.
 	// TODO: When the page is actually written out, we need to erase it from
 	// the delta tree and set the `num_bytes_changed` on the node to 0.
-	logger.log("DeltaTree::before_unload(): page " + std::to_string(page_id) +
-			   " state " +
-			   (state == State::DIRTY
-					? "DIRTY"
-					: (state == State::NEW ? "NEW" : "CLEAN")));
+	// logger.log("DeltaTree::before_unload(): page " + std::to_string(page_id)
+	// + 		   " state " + 		   (state == State::DIRTY 				? "DIRTY" 				: (state == State::NEW ?
+	// "NEW" : "CLEAN")));
 	if (is_locked)
 		// throw std::logic_error("DeltaTree::before_unload(): Re-entrant
 		// call");

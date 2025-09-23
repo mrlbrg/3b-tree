@@ -176,10 +176,10 @@ template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 											  const ValueT &value) {
 	using Pivot = std::pair<const KeyT, const PageID>;
-	logger.log("### Splitting node to insert key " + std::string(key));
-	// No frames are to be held at this point.
+	// logger.log("### Splitting node to insert key " + std::string(key));
+	//  No frames are to be held at this point.
 	while (true) {
-		logger.log("Before split:\n" + std::string(*this));
+		// logger.log("Before split:\n" + std::string(*this));
 		auto *curr_frame =
 			&buffer_manager.fix_page(segment_id, root, true, page_logic);
 		auto *curr_node = reinterpret_cast<InnerNode *>(curr_frame->get_data());
@@ -299,7 +299,7 @@ void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 			// Don't mark dirty here. Done while splitting.
 			buffer_manager.unfix_page(*frame, false);
 	}
-	logger.log("After split:\n" + std::string(*this));
+	// logger.log("After split:\n" + std::string(*this));
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>

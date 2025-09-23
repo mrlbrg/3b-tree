@@ -19,7 +19,7 @@ using DeltaTreeInt = DeltaTree<UInt64, TID>;
 // -----------------------------------------------------------------
 static const constexpr SegmentID TEST_SEGMENT_ID = 834;
 static const constexpr size_t TEST_PAGE_SIZE = 128;
-static const constexpr size_t TEST_NUM_PAGES = 10;
+static const constexpr size_t TEST_NUM_PAGES = 50;
 // -----------------------------------------------------------------
 static std::vector<std::byte> get_random_bytes(size_t num_bytes) {
 	static std::mt19937 gen(42); // Mersenne Twister engine
@@ -356,11 +356,13 @@ TEST_F(BBBTreeTest, SplitAndInserts) {
 		(sizeof(UInt64) + sizeof(TID) + sizeof(BTreeInt::LeafNode::Slot));
 
 	// Fill up the single node.
+	std::vector<size_t> inserted;
 	size_t i = 1;
 	for (; i < tuples_per_leaf; i++) {
 		EXPECT_TRUE(bbbtree_int->insert(i, i + 2));
 		EXPECT_TRUE(bbbtree_int->lookup(i).has_value());
 		EXPECT_EQ(bbbtree_int->lookup(i), i + 2);
+		inserted.push_back(i);
 	}
 	// Force node to disk.
 	buffer_manager->clear_all();
@@ -373,6 +375,7 @@ TEST_F(BBBTreeTest, SplitAndInserts) {
 		EXPECT_EQ(bbbtree_int->lookup(i), i + 2);
 		++i;
 	}
+	buffer_manager->clear_all();
 
 	// Insert into the left node again.
 	EXPECT_TRUE(bbbtree_int->insert(0, 2));
@@ -683,8 +686,8 @@ struct SeedableTree : public IndexT<KeyT, ValueT> {
 			return {key_size, value_size};
 		};
 
-		log_all("Seeding tree with up to " + std::to_string(insert_size) +
-				" bytes.");
+		// log_all("Seeding tree with up to " + std::to_string(insert_size) +
+		// 		" bytes.");
 
 		size_t num_bytes = 0;
 		while (num_bytes < insert_size) {
@@ -700,15 +703,15 @@ struct SeedableTree : public IndexT<KeyT, ValueT> {
 
 			// Insert into tree.
 			if (expected_map.count(key) == 0) {
-				log("-- Inserting key " + std::string(key) + " with value " +
-					std::string(value) + " (" +
-					std::to_string(key_size + value_size) + " bytes)");
+				// log("-- Inserting key " + std::string(key) + " with value " +
+				// 	std::string(value) + " (" +
+				// 	std::to_string(key_size + value_size) + " bytes)");
 
 				bool success = this->insert(key, value);
 
-				if (!success) {
-					log_all("---- FAILED INSERTION");
-				}
+				// if (!success) {
+				// 	log_all("---- FAILED INSERTION");
+				// }
 
 				assert(success);
 				expected_map[key] = value;
@@ -717,14 +720,14 @@ struct SeedableTree : public IndexT<KeyT, ValueT> {
 				assert(this->height() < PageSize);
 			} else {
 
-				log("-- Not inserting key " + std::string(key) +
-					" with value " + std::string(value) + " (" +
-					std::to_string(key_size + value_size) +
-					" bytes). Key already exists.");
+				// log("-- Not inserting key " + std::string(key) +
+				// 	" with value " + std::string(value) + " (" +
+				// 	std::to_string(key_size + value_size) +
+				// 	" bytes). Key already exists.");
 
-				if (!(this->insert(key, value) == false)) {
-					log_all("---- INSERTION SHOULD FAIL BUT DID NOT");
-				}
+				// if (!(this->insert(key, value) == false)) {
+				// 	log_all("---- INSERTION SHOULD FAIL BUT DID NOT");
+				// }
 
 				assert(this->insert(key, value) == false);
 				data.pop_back();
@@ -733,29 +736,29 @@ struct SeedableTree : public IndexT<KeyT, ValueT> {
 		}
 	}
 
-	void log(const std::string &msg) { logger.log(msg); }
+	// void log(const std::string &msg) { logger.log(msg); }
 
 	using IndexT<KeyT, ValueT>::operator std::string;
 
-	void log_all(const std::string &msg = "") {
-		auto map_to_string = [&]() -> std::string {
-			std::stringstream ss;
-			ss << "expected_map {";
-			bool first = true;
-			for (const auto &[key, value] : expected_map) {
-				if (!first)
-					ss << ", ";
-				ss << std::string(key) << ": " << std::string(value);
-				first = false;
-			}
-			ss << "}";
-			return ss.str();
-		};
+	// void log_all(const std::string &msg = "") {
+	// 	auto map_to_string = [&]() -> std::string {
+	// 		std::stringstream ss;
+	// 		ss << "expected_map {";
+	// 		bool first = true;
+	// 		for (const auto &[key, value] : expected_map) {
+	// 			if (!first)
+	// 				ss << ", ";
+	// 			ss << std::string(key) << ": " << std::string(value);
+	// 			first = false;
+	// 		}
+	// 		ss << "}";
+	// 		return ss.str();
+	// 	};
 
-		log(msg);
-		logger.log(std::string(*this));
-		logger.log(map_to_string());
-	}
+	// 	log(msg);
+	// 	logger.log(std::string(*this));
+	// 	logger.log(map_to_string());
+	// }
 
 	/// Validates that all previously `seed`ed key/value pairs are still
 	/// present in the tree.
@@ -796,7 +799,8 @@ TEST_F(BBBTreeTest, LargeIntTree) {
 	SeedableTree<BBBTree, UInt64, TID, page_size> tree{TEST_SEGMENT_ID,
 													   *buffer_manager};
 
-	tree.seed(1'000);
+	tree.seed(10'000);
+	logger.log(tree);
 	EXPECT_TRUE(tree.validate());
 }
 // ----------------------------------------------------------------

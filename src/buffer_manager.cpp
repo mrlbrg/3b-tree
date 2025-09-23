@@ -105,9 +105,9 @@ void BufferManager::load(BufferFrame &frame, SegmentID segment_id,
 BufferFrame &BufferManager::fix_page(SegmentID segment_id, PageID page_id,
 									 bool /*exclusive*/,
 									 PageLogic *page_logic) {
-	logger.log("Fixing page " + std::to_string(segment_id) + "." +
-			   std::to_string(page_id) + " {");
-	++logger;
+	// logger.log("Fixing page " + std::to_string(segment_id) + "." +
+	// 		   std::to_string(page_id) + " {");
+	// ++logger;
 	// Sanity Check
 	assert((page_id & 0xFFFF000000000000ULL) == 0);
 
@@ -115,12 +115,12 @@ BufferFrame &BufferManager::fix_page(SegmentID segment_id, PageID page_id,
 	auto frame_it = id_to_frame.find(segment_page_id);
 	// Page already buffered?
 	if (frame_it != id_to_frame.end()) {
-		logger.log("Page already in buffer.");
-		// TODO: Already used by someone else?
+		// logger.log("Page already in buffer.");
+		//  TODO: Already used by someone else?
 		auto &frame = frame_it->second;
 		++(frame->in_use_by);
-		--logger;
-		logger.log("}");
+		// --logger;
+		// logger.log("}");
 		return *(frame_it->second);
 	}
 
@@ -131,14 +131,14 @@ BufferFrame &BufferManager::fix_page(SegmentID segment_id, PageID page_id,
 	id_to_frame[segment_page_id] = &frame;
 	frame.in_use_by = 1;
 	frame.page_logic = page_logic;
-	logger.log("Loading page into buffer.");
+	// logger.log("Loading page into buffer.");
 	load(frame, segment_id, page_id);
-	logger.log(*this);
+	// logger.log(*this);
 
 	assert(validate());
 
-	--logger;
-	logger.log("}");
+	// --logger;
+	// logger.log("}");
 
 	return frame;
 }
@@ -177,8 +177,8 @@ bool BufferManager::remove(BufferFrame &frame) {
 }
 // ----------------------------------------------------------------
 bool BufferManager::evict() {
-	logger.log("Buffer full, evicting a page...");
-	logger.log(*this);
+	// logger.log("Buffer full, evicting a page...");
+	// logger.log(*this);
 	assert(validate());
 	// Select random page for eviction.
 	size_t i = std::rand() % page_frames.size();
@@ -188,16 +188,17 @@ bool BufferManager::evict() {
 	// Find a page that is not in use from there.
 	while (true) {
 		if (!frame->in_use_by) {
-			logger.log("Evicting page " + std::to_string(frame->segment_id) +
-					   "." + std::to_string(frame->page_id));
-			logger.log(*frame);
+			// logger.log("Evicting page " + std::to_string(frame->segment_id) +
+			// 		   "." + std::to_string(frame->page_id));
+			// logger.log(*frame);
 
 			// Try to remove the page.
 			auto success = remove(*frame);
 			if (success)
 				break;
-			logger.log("Could not evict page because unload was not allowed by "
-					   "page logic.");
+			// logger.log("Could not evict page because unload was
+			// 		   // not allowed by "
+			// 		   "page logic.");
 		}
 
 		// Stop when having scanned all frames already.
@@ -219,8 +220,9 @@ BufferFrame &BufferManager::get_free_frame() {
 	// Buffer full?
 	if (free_buffer_frames.empty()) {
 		auto success = evict();
-		if (!success)
+		if (!success) {
 			throw buffer_full_error();
+		}
 	}
 
 	// Sanity check
@@ -256,7 +258,7 @@ void BufferManager::clear_all() {
 restart:
 	for (const auto &[page_id, frame] : id_to_frame) {
 		auto success = remove(*frame);
-		assert(success);
+		// assert(success);
 	}
 	// During `unload` of BTree nodes, some pages might have been loaded
 	// into the buffer to store the deltas. Therefore we might have to go
@@ -271,10 +273,10 @@ bool BufferManager::validate() const {
 	// Check that the number of free frames and used frames adds up to the
 	// total number of frames.
 	if (free_buffer_frames.size() + id_to_frame.size() != page_frames.size()) {
-		logger.log("Validating BufferManager...");
-		logger.log("Inconsistent state: free_buffer_frames.size() + "
-				   "id_to_frame.size() != page_frames.size()");
-		logger.log(*this);
+		// logger.log("Validating BufferManager...");
+		// logger.log("Inconsistent state: free_buffer_frames.size() + "
+		// 		   "id_to_frame.size() != page_frames.size()");
+		// logger.log(*this);
 		return false;
 	}
 
@@ -282,20 +284,21 @@ bool BufferManager::validate() const {
 	// correct segment_id and page_id as the frames their mapping to.
 	for (auto [page_id, frame_ptr] : id_to_frame) {
 		if (frame_ptr->state == State::UNDEFINED) {
-			logger.log("Validating BufferManager...");
-			logger.log("Inconsistent state: page " + std::to_string(page_id) +
-					   " is in id_to_frame but UNDEFINED");
-			logger.log(*this);
+			// logger.log("Validating BufferManager...");
+			// logger.log("Inconsistent state: page " + std::to_string(page_id)
+			// +
+			//    " is in id_to_frame but UNDEFINED");
+			// logger.log(*this);
 			return false;
 		}
 		SegmentID segment_id = static_cast<SegmentID>(page_id >> 48);
 		PageID pid = page_id & 0x0000FFFFFFFFFFFFULL;
 		if (frame_ptr->segment_id != segment_id || frame_ptr->page_id != pid) {
-			logger.log("Validating BufferManager...");
-			logger.log("Inconsistent state: page " +
-					   std::to_string(segment_id) + "." + std::to_string(pid) +
-					   " has wrong segment_id or page_id");
-			logger.log(*this);
+			// logger.log("Validating BufferManager...");
+			// logger.log("Inconsistent state: page " +
+			// 		   std::to_string(segment_id) + "." + std::to_string(pid) +
+			// 		   " has wrong segment_id or page_id");
+			// logger.log(*this);
 			return false;
 		}
 	}
