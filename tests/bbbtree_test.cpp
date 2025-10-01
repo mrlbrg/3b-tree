@@ -800,7 +800,7 @@ TEST_F(BBBTreeTest, LargeIntTree) {
 													   *buffer_manager};
 
 	tree.seed(10'000);
-	logger.log(tree);
+	// logger.log(tree);
 	EXPECT_TRUE(tree.validate());
 }
 // ----------------------------------------------------------------

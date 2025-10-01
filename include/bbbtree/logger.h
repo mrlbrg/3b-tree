@@ -2,6 +2,8 @@
 
 #include <cassert>
 #include <fstream>
+#include <stdexcept>
+#include <string>
 
 namespace bbbtree {
 
@@ -13,6 +15,7 @@ class Logger {
 		assert(out.is_open());
 		out << level << message << std::endl;
 #endif
+		throw std::runtime_error("Not in debug mode");
 	}
 
 	~Logger() { out.close(); }
@@ -22,6 +25,7 @@ class Logger {
 		level += "-";
 		return *this;
 #endif
+		throw std::runtime_error("Not in debug mode");
 	}
 	Logger &operator--() {
 #ifndef NDEBUG
@@ -29,6 +33,7 @@ class Logger {
 		level.pop_back();
 		return *this;
 #endif
+		throw std::runtime_error("Not in debug mode");
 	}
 
   private:
