@@ -11,9 +11,10 @@ FetchContent_Declare(
 )
 
 set(BENCHMARK_ENABLE_TESTING OFF)
-set(SAVED_FLAGS "${CMAKE_CXX_FLAGS}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error")
+
 
 FetchContent_MakeAvailable(benchmark)
 
-set(CMAKE_CXX_FLAGS "${SAVED_FLAGS}")
+set_target_properties(benchmark PROPERTIES
+    COMPILE_OPTIONS "-Wno-unused-but-set-variable"
+)
