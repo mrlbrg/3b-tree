@@ -3,40 +3,46 @@
 #include "bbbtree/buffer_manager.h"
 #include "bbbtree/segment.h"
 #include "bbbtree/types.h"
-
+// -----------------------------------------------------------------
 #include <concepts>
 #include <cstdint>
 #include <vector>
-
+// -----------------------------------------------------------------
 // TODO: Rethink `logic_errors` and which error makes more sense to throw.
 // TODO: Maybe store tuples directly in B-Tree and do not redirect via TID.
 // TODO: Create a metadata page that stores all state for all segments. That
 // way, not each BTree has to store its state on its own page, wasting space in
 // the buffer.
-
+// -----------------------------------------------------------------
 namespace bbbtree {
+// -----------------------------------------------------------------
 // We use only a single type of value for this database.
 using ValueT = uint64_t;
+// -----------------------------------------------------------------
 // Buffer Configs
 static const constexpr size_t PAGE_SIZE = 1024;
 static const constexpr size_t NUM_PAGES = 10;
+// -----------------------------------------------------------------
 // File Configs
 static const constexpr SegmentID FSI_SEGMENT_ID = 0;
 static const constexpr SegmentID SP_SEGMENT_ID = 1;
 static const constexpr SegmentID INDEX_SEGMENT_ID = 2;
 static const constexpr SegmentID DELTA_SEGMENT_ID = 3;
-
+// -----------------------------------------------------------------
 /// A concept that requires some member functions from an index mapping a key to
 /// TIDs.
 template <template <typename, typename, bool = false> class IndexT,
 		  typename KeyT>
-concept IndexInterface = requires(IndexT<KeyT, TID> index, const KeyT &key,
-								  const TID &value, size_t page_size) {
-	{ index.lookup(key) } -> std::same_as<std::optional<TID>>;
-	{ index.erase(key, page_size) } -> std::same_as<void>;
-	{ index.insert(key, value) } -> std::same_as<bool>;
-};
-
+concept IndexInterface =
+	requires(IndexT<KeyT, TID> index, const KeyT &key, const TID &value,
+			 size_t page_size, SegmentID segment_id,
+			 BufferManager &buffer_manager, uint16_t wa_threshold) {
+		{ IndexT<KeyT, TID>(segment_id, buffer_manager, wa_threshold) };
+		{ index.lookup(key) } -> std::same_as<std::optional<TID>>;
+		{ index.erase(key, page_size) } -> std::same_as<void>;
+		{ index.insert(key, value) } -> std::same_as<bool>;
+	};
+// -----------------------------------------------------------------
 /// A Database maintains a single table of keys and values. The schema is
 /// fixated at compile-time. It is templated on its index, which maps `KeyT` to
 /// TIDs. The value type is always the same.
@@ -56,8 +62,8 @@ class Database {
 	};
 
 	/// Constructor.
-	Database(size_t page_size = PAGE_SIZE, size_t num_pages = NUM_PAGES,
-			 bool reset = false);
+	Database(size_t page_size, size_t num_pages, uint16_t wa_threshold,
+			 bool reset);
 
 	/// Inserts a tuple into the database.
 	/// TODO: Allow insert of variable sized tuples.

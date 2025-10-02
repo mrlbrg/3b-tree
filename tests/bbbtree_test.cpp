@@ -5,6 +5,7 @@
 #include "bbbtree/stats.h"
 #include "bbbtree/types.h"
 
+#include <cstdint>
 #include <gtest/gtest.h>
 #include <memory>
 #include <random>
@@ -20,6 +21,7 @@ using DeltaTreeInt = DeltaTree<UInt64, TID>;
 static const constexpr SegmentID TEST_SEGMENT_ID = 834;
 static const constexpr size_t TEST_PAGE_SIZE = 128;
 static const constexpr size_t TEST_NUM_PAGES = 50;
+static const constexpr uint16_t TEST_WA_THRESHOLD = 100;
 // -----------------------------------------------------------------
 static std::vector<std::byte> get_random_bytes(size_t num_bytes) {
 	static std::mt19937 gen(42); // Mersenne Twister engine
@@ -198,8 +200,8 @@ TEST_F(BBBTreeTest, BufferManagerStopsUnload) {
 TEST_F(BBBTreeTest, DeltaTree) {
 	std::unique_ptr<BufferManager> buffer_manager =
 		std::make_unique<BufferManager>(TEST_PAGE_SIZE, TEST_NUM_PAGES, true);
-	std::unique_ptr<DeltaTreeInt> delta_tree =
-		std::make_unique<DeltaTreeInt>(TEST_SEGMENT_ID, *buffer_manager);
+	std::unique_ptr<DeltaTreeInt> delta_tree = std::make_unique<DeltaTreeInt>(
+		TEST_SEGMENT_ID, *buffer_manager, TEST_WA_THRESHOLD);
 
 	// TODO: Create a superficial BTree node.
 	// When the state is new, all slots should be cleaned.
@@ -214,8 +216,8 @@ TEST_F(BBBTreeTest, DeltaTree) {
 TEST_F(BBBTreeTest, BufferLeafDeltasInDeltaTree) {
 	std::unique_ptr<BufferManager> buffer_manager =
 		std::make_unique<BufferManager>(TEST_PAGE_SIZE, TEST_NUM_PAGES, true);
-	std::unique_ptr<BBBTreeInt> bbbtree_int =
-		std::make_unique<BBBTreeInt>(TEST_SEGMENT_ID, *buffer_manager);
+	std::unique_ptr<BBBTreeInt> bbbtree_int = std::make_unique<BBBTreeInt>(
+		TEST_SEGMENT_ID, *buffer_manager, TEST_WA_THRESHOLD);
 
 	// Initialize a new node in the BTree with a key.
 	EXPECT_TRUE(bbbtree_int->insert(1, 2));
@@ -272,8 +274,8 @@ TEST_F(BBBTreeTest, LeafSplitsInDeltaTree) {
 	size_t page_size = TEST_PAGE_SIZE;
 	std::unique_ptr<BufferManager> buffer_manager =
 		std::make_unique<BufferManager>(page_size, TEST_NUM_PAGES, true);
-	std::unique_ptr<BBBTreeInt> bbbtree_int =
-		std::make_unique<BBBTreeInt>(TEST_SEGMENT_ID, *buffer_manager);
+	std::unique_ptr<BBBTreeInt> bbbtree_int = std::make_unique<BBBTreeInt>(
+		TEST_SEGMENT_ID, *buffer_manager, TEST_WA_THRESHOLD);
 
 	const size_t tuples_per_leaf =
 		(page_size - sizeof(BTreeInt::LeafNode)) /
@@ -340,7 +342,7 @@ TEST_F(BBBTreeTest, SplitAndInserts) {
 	class TestBBBTree : public BBBTreeInt {
 	  public:
 		TestBBBTree(SegmentID segment_id, BufferManager &buffer_manager)
-			: BBBTreeInt(segment_id, buffer_manager) {}
+			: BBBTreeInt(segment_id, buffer_manager, TEST_WA_THRESHOLD) {}
 
 		DeltaTreeInt *get_delta_tree() { return &(this->delta_tree); }
 	};
@@ -426,7 +428,7 @@ TEST_F(BBBTreeTest, InnerNodeInsert) {
 	class TestBBBTree : public BBBTreeInt {
 	  public:
 		TestBBBTree(SegmentID segment_id, BufferManager &buffer_manager)
-			: BBBTreeInt(segment_id, buffer_manager) {}
+			: BBBTreeInt(segment_id, buffer_manager, TEST_WA_THRESHOLD) {}
 
 		DeltaTreeInt *get_delta_tree() { return &(this->delta_tree); }
 
@@ -488,7 +490,7 @@ TEST_F(BBBTreeTest, InnerNodeUpdate) {
 	class TestBBBTree : public BBBTreeInt {
 	  public:
 		TestBBBTree(SegmentID segment_id, BufferManager &buffer_manager)
-			: BBBTreeInt(segment_id, buffer_manager) {}
+			: BBBTreeInt(segment_id, buffer_manager, TEST_WA_THRESHOLD) {}
 
 		DeltaTreeInt *get_delta_tree() { return &(this->delta_tree); }
 
@@ -552,7 +554,7 @@ TEST_F(BBBTreeTest, UpdatingDeltaTreeEntries) {
 	class TestBBBTree : public BBBTreeInt {
 	  public:
 		TestBBBTree(SegmentID segment_id, BufferManager &buffer_manager)
-			: BBBTreeInt(segment_id, buffer_manager) {}
+			: BBBTreeInt(segment_id, buffer_manager, TEST_WA_THRESHOLD) {}
 
 		DeltaTreeInt *get_delta_tree() { return &(this->delta_tree); }
 
@@ -642,8 +644,9 @@ struct SeedableTree : public IndexT<KeyT, ValueT> {
 		PageSize - BTreeInt::InnerNode::min_space;
 
 	/// Constructor.
-	SeedableTree(SegmentID segment_id, BufferManager &buffer_manager)
-		: BBBTree<KeyT, ValueT>(segment_id, buffer_manager) {
+	SeedableTree(SegmentID segment_id, BufferManager &buffer_manager,
+				 uint16_t wa_threshold)
+		: BBBTree<KeyT, ValueT>(segment_id, buffer_manager, wa_threshold) {
 		stats.clear();
 	}
 	/// Destructor.
@@ -793,11 +796,12 @@ struct SeedableTree : public IndexT<KeyT, ValueT> {
 TEST_F(BBBTreeTest, LargeIntTree) {
 	std::srand(42);
 	static const constexpr size_t page_size = 128;
+	static const constexpr uint16_t wa_threshold = 10;
 
 	std::unique_ptr<BufferManager> buffer_manager =
 		std::make_unique<BufferManager>(page_size, TEST_NUM_PAGES, true);
 	SeedableTree<BBBTree, UInt64, TID, page_size> tree{TEST_SEGMENT_ID,
-													   *buffer_manager};
+													   *buffer_manager, 20};
 
 	tree.seed(10'000);
 	// logger.log(tree);

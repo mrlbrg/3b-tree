@@ -6,7 +6,6 @@
 
 #include <cassert>
 #include <concepts>
-#include <cstdint>
 #include <cstring>
 #include <optional>
 #include <vector>
@@ -106,6 +105,14 @@ struct BTree : public Segment {
 	/// Constructor. Not thread-safe.
 	BTree(SegmentID segment_id, BufferManager &buffer_manager,
 		  PageLogic *page_logic = nullptr);
+	/// Constructor. Not thread-safe.
+	BTree(SegmentID segment_id, BufferManager &buffer_manager)
+		: BTree(segment_id, buffer_manager, nullptr) {}
+	/// `wa_threshold` is not used in this tree, but required for an index
+	/// constructor.
+	BTree(SegmentID segment_id, BufferManager &buffer_manager,
+		  uint16_t /*wa_threshold*/)
+		: BTree(segment_id, buffer_manager, nullptr) {}
 
 	/// Destructor.
 	~BTree();

@@ -3,6 +3,7 @@
 #include "bbbtree/btree.h"
 #include "bbbtree/types.h"
 
+#include <cstdint>
 #include <variant>
 
 namespace bbbtree {

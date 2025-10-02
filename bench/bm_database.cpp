@@ -48,7 +48,7 @@ static void BM_InMemoryRandomWrite(benchmark::State &state) {
 	auto tuples = GetTuples<DatabaseUnderTest>(state.range(0));
 	for (auto _ : state) {
 		state.PauseTiming();
-		DatabaseUnderTest db{BENCH_PAGE_SIZE, BENCH_NUM_PAGES, true};
+		DatabaseUnderTest db{BENCH_PAGE_SIZE, BENCH_NUM_PAGES, 0, true};
 		state.ResumeTiming();
 
 		db.insert(tuples);
@@ -61,7 +61,7 @@ static void BM_OutOfMemoryRandomWrite(benchmark::State &state) {
 	auto tuples = GetTuples<DatabaseUnderTest>(state.range(0));
 	for (auto _ : state) {
 		state.PauseTiming();
-		DatabaseUnderTest db{BENCH_PAGE_SIZE, BENCH_NUM_PAGES, true};
+		DatabaseUnderTest db{BENCH_PAGE_SIZE, BENCH_NUM_PAGES, 0, true};
 		state.ResumeTiming();
 
 		db.insert(tuples);
@@ -76,7 +76,7 @@ static void BM_OutOfMemorySequentialWrite(benchmark::State &state) {
 
 	for (auto _ : state) {
 		state.PauseTiming();
-		DatabaseUnderTest db{BENCH_PAGE_SIZE, BENCH_NUM_PAGES, true};
+		DatabaseUnderTest db{BENCH_PAGE_SIZE, BENCH_NUM_PAGES, 0, true};
 		state.ResumeTiming();
 
 		db.insert(tuples);
@@ -86,7 +86,7 @@ static void BM_OutOfMemorySequentialWrite(benchmark::State &state) {
 static void BM_OutOfMemoryRandomLookup(benchmark::State &state) {
 	using DatabaseUnderTest = OutOfMemoryDatabase;
 
-	DatabaseUnderTest db{BENCH_PAGE_SIZE, BENCH_NUM_PAGES, true};
+	DatabaseUnderTest db{BENCH_PAGE_SIZE, BENCH_NUM_PAGES, 0, true};
 	auto tuples = GetTuples<DatabaseUnderTest>(state.range(0));
 	db.insert(tuples);
 
@@ -102,7 +102,7 @@ static void BM_OutOfMemoryRandomLookup(benchmark::State &state) {
 static void BM_OutOfMemorySequentialLookup(benchmark::State &state) {
 	using DatabaseUnderTest = OutOfMemoryDatabase;
 
-	DatabaseUnderTest db{BENCH_PAGE_SIZE, BENCH_NUM_PAGES, true};
+	DatabaseUnderTest db{BENCH_PAGE_SIZE, BENCH_NUM_PAGES, 0, true};
 	auto tuples = GetTuples<DatabaseUnderTest>(state.range(0));
 	db.insert(tuples);
 

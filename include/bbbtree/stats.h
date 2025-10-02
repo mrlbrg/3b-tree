@@ -31,6 +31,7 @@ struct Stats {
 	~Stats() { std::cout << *this << std::endl; }
 
 	void clear();
+	void print() { std::cout << *this << std::endl; }
 };
 
 extern Stats stats;

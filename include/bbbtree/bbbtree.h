@@ -28,15 +28,13 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 	using LeafNode = BTree<KeyT, ValueT, true>::LeafNode;
 	using InnerNode = BTree<KeyT, ValueT, true>::InnerNode;
 
-	// Every update ratio of a node smaller than this value will be buffered in
-	// the delta tree instead of written out.
-	static const constexpr uint16_t UPDATE_RATIO_THRESHOLD = 50;
-
   public:
 	/// Constructor.
-	DeltaTree(SegmentID segment_id, BufferManager &buffer_manager)
+	DeltaTree(SegmentID segment_id, BufferManager &buffer_manager,
+			  uint16_t wa_threshold)
 		: PageLogic(),
-		  BTree<PID, Deltas<KeyT, ValueT>>(segment_id, buffer_manager) {}
+		  BTree<PID, Deltas<KeyT, ValueT>>(segment_id, buffer_manager, nullptr),
+		  wa_threshold(wa_threshold) {}
 
 	/// Scans the given BTree node for dirty entries and buffers them in the
 	/// delta tree.
@@ -73,6 +71,9 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 	/// to indicate that this node cannot be evicted at this time.
 	/// During `after_load`, the tree should never be locked.
 	bool is_locked = false;
+	/// The write amplification threshold. When the ratio of bytes changed
+	/// in a node is below this threshold, we buffer the changes in this tree.
+	const uint16_t wa_threshold;
 };
 // -----------------------------------------------------------------
 /// A B-Tree that can buffer its deltas. Cannot just inherit from `BTree`
@@ -82,8 +83,9 @@ template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree = false>
 class BBBTree {
   public:
 	/// Constructor. The Delta Tree is stored in `segment_id` + 1.
-	BBBTree(SegmentID segment_id, BufferManager &buffer_manager)
-		: delta_tree(segment_id + 1, buffer_manager),
+	BBBTree(SegmentID segment_id, BufferManager &buffer_manager,
+			uint16_t wa_threshold)
+		: delta_tree(segment_id + 1, buffer_manager, wa_threshold),
 		  btree(segment_id, buffer_manager, &delta_tree) {}
 
 	/// Lookup an entry in the tree. Returns `nullopt` if key was not found.

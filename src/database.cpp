@@ -1,21 +1,24 @@
 #include "bbbtree/database.h"
+#include "bbbtree/bbbtree.h"
 #include "bbbtree/btree.h"
 #include "bbbtree/map.h"
 #include "bbbtree/stats.h"
 #include "bbbtree/types.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <stdexcept>
 
 namespace bbbtree {
 // -----------------------------------------------------------------
 template <template <typename, typename, bool> typename IndexT, typename KeyT>
 	requires IndexInterface<IndexT, KeyT>
-Database<IndexT, KeyT>::Database(size_t page_size, size_t num_pages, bool reset)
+Database<IndexT, KeyT>::Database(size_t page_size, size_t num_pages,
+								 uint16_t wa_threshold, bool reset)
 	: buffer_manager(page_size, num_pages, reset),
 	  space_inventory(FSI_SEGMENT_ID, buffer_manager),
 	  records(SP_SEGMENT_ID, buffer_manager, space_inventory),
-	  index(INDEX_SEGMENT_ID, buffer_manager) {}
+	  index(INDEX_SEGMENT_ID, buffer_manager, wa_threshold) {}
 // -----------------------------------------------------------------
 template <template <typename, typename, bool> typename IndexT, typename KeyT>
 	requires IndexInterface<IndexT, KeyT>
@@ -75,4 +78,6 @@ template class Database<BTree, UInt64>;
 template class Database<BTree, String>;
 template class Database<Map, UInt64>;
 template class Database<Map, String>;
+template class Database<BBBTree, UInt64>;
+template class Database<BBBTree, String>;
 } // namespace bbbtree

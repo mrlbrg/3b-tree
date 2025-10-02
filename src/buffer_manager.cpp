@@ -10,7 +10,6 @@
 #include <string>
 // -----------------------------------------------------------------
 namespace bbbtree {
-
 // -----------------------------------------------------------------
 BufferManager::BufferManager(size_t page_size, size_t page_count, bool clear)
 	: page_size(page_size), clear(clear) {

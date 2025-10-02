@@ -15,6 +15,8 @@ set(BENCHMARK_ENABLE_TESTING OFF)
 
 FetchContent_MakeAvailable(benchmark)
 
-set_target_properties(benchmark PROPERTIES
-    COMPILE_OPTIONS "-Wno-unused-but-set-variable"
-)
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set_target_properties(benchmark PROPERTIES
+        COMPILE_OPTIONS "-Wno-unused-but-set-variable"
+    )
+endif()

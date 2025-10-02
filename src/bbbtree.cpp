@@ -19,8 +19,8 @@ DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
 	// TODO: When the page is actually written out, we need to erase it from
 	// the delta tree and set the `num_bytes_changed` on the node to 0.
 	// logger.log("DeltaTree::before_unload(): page " + std::to_string(page_id)
-	// + 		   " state " + 		   (state == State::DIRTY 				? "DIRTY" 				: (state == State::NEW ?
-	// "NEW" : "CLEAN")));
+	// + 		   " state " + 		   (state == State::DIRTY 				?
+	// "DIRTY" 				: (state == State::NEW ? "NEW" : "CLEAN")));
 	if (is_locked)
 		// throw std::logic_error("DeltaTree::before_unload(): Re-entrant
 		// call");
@@ -33,8 +33,7 @@ DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
 	auto *node = reinterpret_cast<const Node *>(data);
 	// New pages are always written out.
 	// Pages with many updates are always written out.
-	bool has_many_updates =
-		node->get_update_ratio(page_size) > UPDATE_RATIO_THRESHOLD;
+	bool has_many_updates = node->get_update_ratio(page_size) > wa_threshold;
 	bool is_new = (state == State::NEW);
 	bool force_write_out = is_new || has_many_updates;
 

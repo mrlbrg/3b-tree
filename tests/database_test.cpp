@@ -38,7 +38,7 @@ class IntDatabaseTest : public ::testing::Test {
 		// destructor is called after constructor, but we need the files written
 		// to disk before constructing anew.
 		db_.reset();
-		db_ = std::make_unique<IntDatabase>(TEST_PAGE_SIZE, TEST_NUM_PAGES,
+		db_ = std::make_unique<IntDatabase>(TEST_PAGE_SIZE, TEST_NUM_PAGES, 0,
 											reset);
 		if (reset)
 			expected_map.clear();
@@ -79,7 +79,7 @@ class IntDatabaseTest : public ::testing::Test {
 	/// The database under test. When changing these parameters, also change the
 	/// test's parameters, e.g. when testing in or out of memory behavior.
 	std::unique_ptr<IntDatabase> db_ =
-		std::make_unique<IntDatabase>(TEST_PAGE_SIZE, TEST_NUM_PAGES, true);
+		std::make_unique<IntDatabase>(TEST_PAGE_SIZE, TEST_NUM_PAGES, 0, true);
 	// The key/value pairs that are expected to live in the database.
 	std::unordered_map<UInt64, IntDatabase::Tuple> expected_map{};
 };
@@ -92,7 +92,7 @@ class StringDatabaseTest : public ::testing::Test {
 		// to disk before constructing anew.
 		db_.reset();
 		db_ = std::make_unique<StringDatabase>(TEST_PAGE_SIZE, TEST_NUM_PAGES,
-											   reset);
+											   0, reset);
 		if (reset)
 			expected_map.clear();
 	}
@@ -141,8 +141,8 @@ class StringDatabaseTest : public ::testing::Test {
 
 	/// The database under test. When changing these parameters, also change the
 	/// test's parameters, e.g. when testing in or out of memory behavior.
-	std::unique_ptr<StringDatabase> db_ =
-		std::make_unique<StringDatabase>(TEST_PAGE_SIZE, TEST_NUM_PAGES, true);
+	std::unique_ptr<StringDatabase> db_ = std::make_unique<StringDatabase>(
+		TEST_PAGE_SIZE, TEST_NUM_PAGES, 0, true);
 	/// The key/value pairs that are expected to live in the database.
 	std::unordered_map<std::string, StringDatabase::Tuple> expected_map{};
 };

@@ -116,7 +116,7 @@ TEST_F(DeltaTest, DeltasSerialization) {
 }
 /// Deltas can be stored in a BTree.
 TEST_F(DeltaTest, DeltaTree) {
-	IntDeltaTree delta_tree{342, *buffer_manager_};
+	IntDeltaTree delta_tree{342, *buffer_manager_, 100};
 
 	std::vector<IntDelta> values1 = {{OperationType::Inserted, 42, 1001},
 									 {OperationType::Updated, 45, 1004}};
@@ -163,7 +163,7 @@ TEST_F(DeltaTest, VariableSizedDeltas) {
 	std::uniform_int_distribution<int> op_dist(0, 2);
 	std::uniform_int_distribution<int> value_dist(1000, 9999);
 
-	StringDeltaTree delta_tree{123, *buffer_manager_};
+	StringDeltaTree delta_tree{123, *buffer_manager_, 100};
 	std::vector<std::string> keys;
 	std::vector<StringDeltas> expected_deltas;
 

@@ -42,7 +42,7 @@ struct SeedableBTree : public BTree<KeyT, ValueT> {
 
 	/// Constructor.
 	SeedableBTree(SegmentID segment_id, BufferManager &buffer_manager)
-		: BTree<KeyT, ValueT>(segment_id, buffer_manager) {}
+		: BTree<KeyT, ValueT>(segment_id, buffer_manager, nullptr) {}
 
 	/// Seed the tree with random key/value pairs.
 	/// @insert_size: the number of bytes to be inserted in total.
