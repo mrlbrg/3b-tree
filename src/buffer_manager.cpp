@@ -104,9 +104,11 @@ void BufferManager::load(BufferFrame &frame, SegmentID segment_id,
 BufferFrame &BufferManager::fix_page(SegmentID segment_id, PageID page_id,
 									 bool /*exclusive*/,
 									 PageLogic *page_logic) {
-	// logger.log("Fixing page " + std::to_string(segment_id) + "." +
-	// 		   std::to_string(page_id) + " {");
-	// ++logger;
+#ifndef NDEBUG
+	logger.log("Fixing page " + std::to_string(segment_id) + "." +
+			   std::to_string(page_id) + " {");
+	++logger;
+#endif
 	// Sanity Check
 	assert((page_id & 0xFFFF000000000000ULL) == 0);
 
@@ -114,12 +116,14 @@ BufferFrame &BufferManager::fix_page(SegmentID segment_id, PageID page_id,
 	auto frame_it = id_to_frame.find(segment_page_id);
 	// Page already buffered?
 	if (frame_it != id_to_frame.end()) {
-		// logger.log("Page already in buffer.");
 		//  TODO: Already used by someone else?
 		auto &frame = frame_it->second;
 		++(frame->in_use_by);
-		// --logger;
-		// logger.log("}");
+#ifndef NDEBUG
+		logger.log("Page already in buffer.");
+		--logger;
+		logger.log("}");
+#endif
 		return *(frame_it->second);
 	}
 
@@ -130,14 +134,21 @@ BufferFrame &BufferManager::fix_page(SegmentID segment_id, PageID page_id,
 	id_to_frame[segment_page_id] = &frame;
 	frame.in_use_by = 1;
 	frame.page_logic = page_logic;
-	// logger.log("Loading page into buffer.");
+
+#ifndef NDEBUG
+	logger.log("Loading page into buffer.");
+#endif
 	load(frame, segment_id, page_id);
-	// logger.log(*this);
+#ifndef NDEBUG
+	logger.log(*this);
+#endif
 
 	assert(validate());
 
-	// --logger;
-	// logger.log("}");
+#ifndef NDEBUG
+	--logger;
+	logger.log("}");
+#endif
 
 	return frame;
 }
@@ -152,15 +163,17 @@ void BufferManager::unfix_page(BufferFrame &frame, bool is_dirty) {
 	--frame.in_use_by;
 }
 // ----------------------------------------------------------------
-bool BufferManager::remove(BufferFrame &frame) {
+bool BufferManager::remove(BufferFrame &frame, bool write_back) {
 	// Sanity Check: Must not be in use.
 	assert(frame.in_use_by == 0);
-	if (frame.state == State::DIRTY || frame.state == State::NEW) {
-		frame.in_use_by = 1; // Prevent recursive eviction.
-		auto success = unload(frame);
-		frame.in_use_by = 0;
-		if (!success)
-			return false;
+	if (write_back) {
+		if (frame.state == State::DIRTY || frame.state == State::NEW) {
+			frame.in_use_by = 1; // Prevent recursive eviction.
+			auto success = unload(frame);
+			frame.in_use_by = 0;
+			if (!success)
+				return false;
+		}
 	}
 	// Remove from directory.
 	auto segment_page_id =
@@ -176,8 +189,10 @@ bool BufferManager::remove(BufferFrame &frame) {
 }
 // ----------------------------------------------------------------
 bool BufferManager::evict() {
-	// logger.log("Buffer full, evicting a page...");
-	// logger.log(*this);
+#ifndef NDEBUG
+	logger.log("Buffer full, evicting a page...");
+	logger.log(*this);
+#endif
 	assert(validate());
 	// Select random page for eviction.
 	size_t i = std::rand() % page_frames.size();
@@ -187,17 +202,20 @@ bool BufferManager::evict() {
 	// Find a page that is not in use from there.
 	while (true) {
 		if (!frame->in_use_by) {
-			// logger.log("Evicting page " + std::to_string(frame->segment_id) +
-			// 		   "." + std::to_string(frame->page_id));
-			// logger.log(*frame);
+#ifndef NDEBUG
+			logger.log("Evicting page " + std::to_string(frame->segment_id) +
+					   "." + std::to_string(frame->page_id));
+			logger.log(*frame);
+#endif
 
 			// Try to remove the page.
 			auto success = remove(*frame);
 			if (success)
 				break;
-			// logger.log("Could not evict page because unload was
-			// 		   // not allowed by "
-			// 		   "page logic.");
+#ifndef NDEBUG
+			logger.log("Could not evict page because unload was not allowed by "
+					   "page logic.");
+#endif
 		}
 
 		// Stop when having scanned all frames already.
@@ -253,10 +271,16 @@ File &BufferManager::get_segment(SegmentID segment_id) {
 	return *(new_it->second);
 }
 // ------------------------------------------------------------------
-void BufferManager::clear_all() {
+void BufferManager::clear_all(bool write_back) {
+	if (!write_back) {
+		segment_to_file.clear();
+		clear = true;
+		// Setting to clear makes sure that files are reset when
+		// reopening them.
+	}
 restart:
 	for (const auto &[page_id, frame] : id_to_frame) {
-		auto success = remove(*frame);
+		auto success = remove(*frame, write_back);
 		// assert(success);
 	}
 	// During `unload` of BTree nodes, some pages might have been loaded

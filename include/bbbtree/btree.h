@@ -142,6 +142,9 @@ struct BTree : public Segment {
 	/// Not thread-safe.
 	size_t height();
 
+	/// Resets the tree to an empty state. Not thread-safe.
+	void clear();
+
 	/// TODO: Find a more elegant solution for persistency:
 	/// State is persisted at page 0 of this segment.
 	/// Read and written out at construction/destruction time.

@@ -101,9 +101,17 @@ class BBBTree {
 		btree.erase(key, page_size);
 	}
 
+	/// Returns the number of key/value pairs stored in the B-tree.
 	inline size_t size() { return btree.size(); }
 
+	/// Returns the number of levels in the B-tree.
 	inline size_t height() { return btree.height(); }
+
+	/// Clears the trees.
+	void clear() {
+		btree.clear();
+		delta_tree.clear();
+	}
 
 	/// Prints the tree.
 	friend std::ostream &

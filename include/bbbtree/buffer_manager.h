@@ -142,7 +142,9 @@ class BufferManager {
 	void unfix_page(BufferFrame &frame, bool is_dirty);
 
 	/// Clears the buffer.
-	void clear_all();
+	/// If write_back is true, all dirty pages are written to disk first.
+	/// Otherwise, all data is lost, e.g. for benchmarking.
+	void clear_all(bool write_back = true);
 	/// The size of each page in the buffer.
 	const size_t page_size;
 
@@ -180,7 +182,7 @@ class BufferManager {
 	/// writes page to disk.
 	/// Returns false if frame could not be removed because unload was not
 	/// allowed by page logic.
-	bool remove(BufferFrame &frame);
+	bool remove(BufferFrame &frame, bool write_back = true);
 	/// Validates the internal state of the buffer manager.
 	bool validate() const;
 

@@ -41,6 +41,8 @@ class FSISegment : public Segment {
 	void update(PageID target_page, uint32_t free_space);
 	/// Creates a new page in this inventory. Returns the new page's ID.
 	PageID create_new_page(size_t initial_free_space);
+	/// Resets the segment to an empty state.
+	void clear();
 
   private:
 	struct Header {

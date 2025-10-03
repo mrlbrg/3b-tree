@@ -14,8 +14,9 @@ class Logger {
 #ifndef NDEBUG
 		assert(out.is_open());
 		out << level << message << std::endl;
-#endif
+#else
 		throw std::runtime_error("Not in debug mode");
+#endif
 	}
 
 	~Logger() { out.close(); }
@@ -24,16 +25,18 @@ class Logger {
 #ifndef NDEBUG
 		level += "-";
 		return *this;
-#endif
+#else
 		throw std::runtime_error("Not in debug mode");
+#endif
 	}
 	Logger &operator--() {
 #ifndef NDEBUG
 		assert(level.size() > 0);
 		level.pop_back();
 		return *this;
-#endif
+#else
 		throw std::runtime_error("Not in debug mode");
+#endif
 	}
 
   private:

@@ -56,7 +56,15 @@ PageID FSISegment::create_new_page(size_t initial_free_space) {
 
 	return page_id;
 }
+void FSISegment::clear() {
+	auto &frame = buffer_manager.fix_page(segment_id, 0, true, nullptr);
+	auto &header = *(reinterpret_cast<FSISegment::Header *>(frame.get_data()));
 
+	header.allocated_pages = 0;
+	header.free_space = 0;
+
+	buffer_manager.unfix_page(frame, true);
+}
 TID SPSegment::allocate(uint32_t size) {
 	auto create_new_slotted_page = [&]() {
 		// Create new page in Free-Space Inventory

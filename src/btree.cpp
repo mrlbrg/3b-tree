@@ -62,6 +62,27 @@ template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 BTree<KeyT, ValueT, UseDeltaTree>::~BTree() {}
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+void BTree<KeyT, ValueT, UseDeltaTree>::clear() {
+	// Reset meta-data.
+	auto &frame = buffer_manager.fix_page(segment_id, 0, true, nullptr);
+	auto &state = *(reinterpret_cast<BTree<KeyT, ValueT, UseDeltaTree> *>(
+		frame.get_data()));
+
+	root = 1;
+	next_free_page = 2;
+	state.root = root;
+	state.next_free_page = next_free_page;
+
+	// Intialize root node.
+	auto &root_page =
+		buffer_manager.fix_page(segment_id, root, true, page_logic);
+	new (root_page.get_data()) LeafNode(buffer_manager.page_size);
+	buffer_manager.unfix_page(root_page, true);
+
+	buffer_manager.unfix_page(frame, true);
+}
+// -----------------------------------------------------------------
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 std::optional<ValueT>
 BTree<KeyT, ValueT, UseDeltaTree>::lookup(const KeyT &key) {
 	auto &leaf_frame = get_leaf(key, false);

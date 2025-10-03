@@ -27,6 +27,8 @@ template <typename KeyT, typename ValueT, bool UseDeltaTree = false> class Map {
 	[[nodiscard]] bool insert(const KeyT &key, const ValueT &value);
 	/// The number of values stored in the map.
 	size_t size() { return map.size(); }
+	/// Clears the map.
+	void clear() { map.clear(); }
 
   private:
 	/// The map with the values.

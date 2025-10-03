@@ -79,6 +79,12 @@ class Database {
 	/// Returns the number of tuples stored in the database.
 	size_t size() { return index.size(); }
 
+	void clear() {
+		buffer_manager.clear_all(false);
+		space_inventory.clear();
+		index.clear();
+	}
+
   private:
 	/// The buffer manager. Note that the buffer manager must be the first
 	/// member to ensure that it is destructed last. Other members might have
