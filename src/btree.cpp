@@ -204,8 +204,8 @@ void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 		auto *curr_frame =
 			&buffer_manager.fix_page(segment_id, root, true, page_logic);
 		auto *curr_node = reinterpret_cast<InnerNode *>(curr_frame->get_data());
-		// All nodes that lie on the path to the key with the leaf in the back
-		// and root in front.
+		// All nodes that lie on the path to the key with the leaf in the
+		// back and root in front.
 		std::deque<BufferFrame *> path{curr_frame};
 		// All nodes we touch are locked. Must be released in the end.
 		std::vector<BufferFrame *> locked_nodes{curr_frame};
@@ -562,7 +562,8 @@ BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::split(InnerNode &new_node,
 	assert(dst >= reinterpret_cast<std::byte *>(this->slots_end()));
 	std::memcpy(dst, buffered_key.data(), buffered_key.size());
 
-	// Returning a reference to a section that can be modified. Use with care.
+	// Returning a reference to a section that can be modified. Use with
+	// care.
 	return KeyT::deserialize(dst, buffered_key.size());
 }
 // -----------------------------------------------------------------
@@ -593,8 +594,8 @@ void BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::insert_split(
 			if (slot_target->state == OperationType::Unchanged)
 				this->num_bytes_changed += required_space(
 					slot_target->get_key(this->get_data()), new_child);
-			// Indicate that the child has changed from the disk state. Unless
-			// it was newly inserted since loaded from disk.
+			// Indicate that the child has changed from the disk state.
+			// Unless it was newly inserted since loaded from disk.
 			if (slot_target->state != OperationType::Inserted)
 				slot_target->state = OperationType::Updated;
 		}
@@ -934,8 +935,8 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::erase(const KeyT &key,
 
 	// Track delta.
 	if constexpr (UseDeltaTree) {
-		// Only count changed bytes if they have not already been changed by a
-		// previous operation.
+		// Only count changed bytes if they have not already been changed by
+		// a previous operation.
 		if (slot->state == OperationType::Unchanged)
 			this->num_bytes_changed +=
 				required_space(key, slot->get_value(this->get_data()));
@@ -948,10 +949,14 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::erase(const KeyT &key,
 	--this->slot_count;
 
 	// TODO: Cheap compactification.
-	// However, we might want to track potential free space on nodes instead and
-	// perform compactification when it makes a new insert fit instead.
-	if (this->slot_count == 0)
-		this->data_start = page_size;
+	// However, we might want to track potential free space on nodes instead
+	// and perform compactification when it makes a new insert fit instead.
+	// if (this->slot_count == 0)
+	// 	this->data_start = page_size;
+
+	// TODO: Only temporarily compactify here. We might want to track free
+	// space and only compactify when we need the space.
+	compactify(page_size);
 
 	return true;
 }
