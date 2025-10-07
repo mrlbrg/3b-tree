@@ -948,13 +948,7 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::erase(const KeyT &key,
 	}
 	--this->slot_count;
 
-	// TODO: Cheap compactification.
-	// However, we might want to track potential free space on nodes instead
-	// and perform compactification when it makes a new insert fit instead.
-	// if (this->slot_count == 0)
-	// 	this->data_start = page_size;
-
-	// TODO: Only temporarily compactify here. We might want to track free
+	// TODO: Only temporarily compactify here. We want to track free
 	// space and only compactify when we need the space.
 	compactify(page_size);
 
