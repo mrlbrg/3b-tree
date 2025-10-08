@@ -2,6 +2,7 @@
 
 #include "bbbtree/buffer_manager.h"
 #include "bbbtree/segment.h"
+#include "bbbtree/stats.h"
 #include "bbbtree/types.h"
 
 #include <cassert>
@@ -145,6 +146,9 @@ struct BTree : public Segment {
 	/// Resets the tree to an empty state. Not thread-safe.
 	void clear();
 
+	/// Sets the height in the stats.
+	void set_height() { stats.b_tree_height = height(); }
+
 	/// TODO: Find a more elegant solution for persistency:
 	/// State is persisted at page 0 of this segment.
 	/// Read and written out at construction/destruction time.
@@ -165,7 +169,6 @@ struct BTree : public Segment {
 		/// to `UseDeltaTree`. A high degree has a higher chance of being
 		/// written to disk on eviction. Pages with low write amplification are
 		/// more likely to be buffered the delta tree.
-		/// TODO: Reset this value when going to disk.
 		std::conditional_t<UseDeltaTree, uint16_t, EmptyStruct>
 			num_bytes_changed;
 

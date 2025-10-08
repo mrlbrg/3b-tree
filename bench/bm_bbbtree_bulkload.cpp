@@ -13,6 +13,8 @@
 // -----------------------------------------------------------------
 using namespace bbbtree;
 // -----------------------------------------------------------------
+/// Benchmark for measuring insert performance of BBBTree vs BTree in an empty
+/// database.
 namespace {
 // -----------------------------------------------------------------
 using KeyT = UInt64;
@@ -44,6 +46,30 @@ std::vector<typename TestDatabase::Tuple> GetTuples(size_t num_tuples) {
 	return tuples;
 }
 // -----------------------------------------------------------------
+void SetBenchmarkCounters(benchmark::State &state, const Stats &stats) {
+	size_t num_tuples = state.range(0);
+	size_t num_pages = state.range(1);
+	uint16_t wa_threshold = state.range(2);
+	uint16_t page_size = state.range(3);
+
+	state.counters["wa_threshold"] = wa_threshold;
+	state.counters["page_size"] = page_size;
+	state.counters["num_pages"] = num_pages;
+	state.counters["num_tuples"] = num_tuples;
+
+	state.counters["b_tree_height"] = stats.b_tree_height;
+	state.counters["delta_tree_height"] = stats.delta_tree_height;
+	state.counters["node_splits"] =
+		stats.inner_node_splits + stats.leaf_node_splits;
+	state.counters["bytes_written_logically"] = stats.bytes_written_logically;
+	state.counters["bytes_written_physically"] = stats.bytes_written_physically;
+	state.counters["pages_evicted"] = stats.pages_evicted;
+	state.counters["pages_written"] = stats.pages_written;
+	state.counters["pages_write_deferred"] = stats.pages_write_deferred;
+	state.counters["pages_created"] = stats.pages_created;
+	// Add more as needed
+}
+// -----------------------------------------------------------------
 static void BM_DatabaseWithBTreeIndex(benchmark::State &state) {
 	using DatabaseUnderTest = BTreeIndexedDB;
 
@@ -59,21 +85,12 @@ static void BM_DatabaseWithBTreeIndex(benchmark::State &state) {
 		db.insert(tuples);
 
 		state.PauseTiming();
+		db.set_height();
 		db.clear();
 		state.ResumeTiming();
 	}
 
-	state.counters["wa_threshold"] = wa_threshold;
-	state.counters["page_size"] = page_size;
-	state.counters["num_pages"] = num_pages;
-	state.counters["num_tuples"] = num_tuples;
-	state.counters["node_splits"] =
-		stats.inner_node_splits + stats.leaf_node_splits;
-	state.counters["bytes_written_logically"] = stats.bytes_written_logically;
-	state.counters["bytes_written_physically"] = stats.bytes_written_physically;
-	state.counters["pages_evicted"] = stats.pages_evicted;
-	state.counters["pages_written"] = stats.pages_written;
-	state.counters["pages_write_deferred"] = stats.pages_write_deferred;
+	SetBenchmarkCounters(state, stats);
 }
 // -----------------------------------------------------------------
 static void BM_DatabaseWithBBBTreeIndex(benchmark::State &state) {
@@ -91,21 +108,11 @@ static void BM_DatabaseWithBBBTreeIndex(benchmark::State &state) {
 		db.insert(tuples);
 
 		state.PauseTiming();
+		db.set_height();
 		db.clear();
 		state.ResumeTiming();
 	}
-
-	state.counters["wa_threshold"] = wa_threshold;
-	state.counters["page_size"] = page_size;
-	state.counters["num_pages"] = num_pages;
-	state.counters["num_tuples"] = num_tuples;
-	state.counters["node_splits"] =
-		stats.inner_node_splits + stats.leaf_node_splits;
-	state.counters["bytes_written_logically"] = stats.bytes_written_logically;
-	state.counters["bytes_written_physically"] = stats.bytes_written_physically;
-	state.counters["pages_evicted"] = stats.pages_evicted;
-	state.counters["pages_written"] = stats.pages_written;
-	state.counters["pages_write_deferred"] = stats.pages_write_deferred;
+	SetBenchmarkCounters(state, stats);
 }
 // -----------------------------------------------------------------
 } // namespace
@@ -128,6 +135,10 @@ BENCHMARK(BM_DatabaseWithBTreeIndex)
 	->Args({100'000, BENCH_NUM_PAGES, 5, BENCH_PAGE_SIZE});
 BENCHMARK(BM_DatabaseWithBBBTreeIndex)
 	->Args({100'000, BENCH_NUM_PAGES, 5, BENCH_PAGE_SIZE});
+// BENCHMARK(BM_DatabaseWithBTreeIndex)
+// 	->Args({1'000'000, BENCH_NUM_PAGES, 5, BENCH_PAGE_SIZE});
+// BENCHMARK(BM_DatabaseWithBBBTreeIndex)
+// 	->Args({1'000'000, BENCH_NUM_PAGES, 5, BENCH_PAGE_SIZE});
 // -----------------------------------------------------------------
 // WA Threshold of 10
 BENCHMARK(BM_DatabaseWithBTreeIndex)

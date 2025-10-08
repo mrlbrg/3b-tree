@@ -78,6 +78,8 @@ class Database {
 	void erase(const KeyT &key);
 	/// Returns the number of tuples stored in the database.
 	size_t size() { return index.size(); }
+	/// Sets the heights of the underlying index in the stats.
+	void set_height() { index.set_height(); }
 
 	void clear() {
 		buffer_manager.clear_all(false);

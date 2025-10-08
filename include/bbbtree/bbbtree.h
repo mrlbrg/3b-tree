@@ -107,6 +107,12 @@ class BBBTree {
 	/// Returns the number of levels in the B-tree.
 	inline size_t height() { return btree.height(); }
 
+	/// Sets the height in the stats.
+	void set_height() {
+		stats.b_tree_height = height();
+		stats.delta_tree_height = delta_tree.height();
+	}
+
 	/// Clears the trees.
 	void clear() {
 		btree.clear();

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "bbbtree/buffer_manager.h"
+#include "bbbtree/stats.h"
 
 #include <unordered_map>
 
@@ -29,6 +30,8 @@ template <typename KeyT, typename ValueT, bool UseDeltaTree = false> class Map {
 	size_t size() { return map.size(); }
 	/// Clears the map.
 	void clear() { map.clear(); }
+	/// Sets the height in the stats. Does nothing for a map.
+	void set_height() { stats.b_tree_height = 0; }
 
   private:
 	/// The map with the values.

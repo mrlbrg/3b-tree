@@ -18,6 +18,8 @@ struct Stats {
 	// The number of bytes that were actually changed physically in memory.
 	size_t bytes_written_physically = 0;
 
+	// Counts every time a new page is created in the system.
+	size_t pages_created = 0;
 	// Counts every time a page is removed from the buffer. May have been
 	// written to disk or not. E.g. a clean page is removed but not written or a
 	// dirty page whose writes are deferred.
@@ -27,6 +29,10 @@ struct Stats {
 	// Counts the number of times a page's changed were extracted and buffered
 	// in-memory instead of written to disk.
 	size_t pages_write_deferred = 0;
+	// Tracks the maximum height of the B-Tree.
+	size_t b_tree_height = 0;
+	// Tracks the maximum height of the Delta Tree.
+	size_t delta_tree_height = 0;
 
 	~Stats() { std::cout << *this << std::endl; }
 
