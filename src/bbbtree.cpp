@@ -13,11 +13,6 @@ template <KeyIndexable KeyT, ValueIndexable ValueT>
 std::pair<bool, bool>
 DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
 									   PageID page_id, size_t page_size) {
-	// TODO: When we return true to continue to write out because
-	// write amplification is low,
-	// we must clean the slots of their dirty state too.
-	// TODO: When the page is actually written out, we need to erase it from
-	// the delta tree and set the `num_bytes_changed` on the node to 0.
 	// logger.log("DeltaTree::before_unload(): page " + std::to_string(page_id)
 	// + 		   " state " + 		   (state == State::DIRTY 				?
 	// "DIRTY" 				: (state == State::NEW ? "NEW" : "CLEAN")));

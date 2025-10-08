@@ -1,4 +1,5 @@
 #include "bbbtree/segment.h"
+#include "bbbtree/stats.h"
 
 #include <cassert>
 #include <cstring>
@@ -53,6 +54,8 @@ PageID FSISegment::create_new_page(size_t initial_free_space) {
 	header.free_space = initial_free_space;
 	auto page_id = header.allocated_pages - 1;
 	buffer_manager.unfix_page(frame, true);
+
+	++stats.pages_created;
 
 	return page_id;
 }

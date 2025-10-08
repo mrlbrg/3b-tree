@@ -189,6 +189,8 @@ PageID BTree<KeyT, ValueT, UseDeltaTree>::get_new_page() {
 
 	buffer_manager.unfix_page(frame, true);
 
+	stats.pages_created++;
+
 	return page_id;
 }
 
