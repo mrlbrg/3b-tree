@@ -38,3 +38,9 @@ build/
 
 # Logs
 log.txt
+
+# Data
+*.csv
+
+# MacOS files
+.DS_Store
