@@ -56,6 +56,7 @@ PageID FSISegment::create_new_page(size_t initial_free_space) {
 	buffer_manager.unfix_page(frame, true);
 
 	++stats.pages_created;
+	++stats.slotted_pages_created;
 
 	return page_id;
 }

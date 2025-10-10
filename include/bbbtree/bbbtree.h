@@ -74,6 +74,8 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 	/// The write amplification threshold. When the ratio of bytes changed
 	/// in a node is below this threshold, we buffer the changes in this tree.
 	const uint16_t wa_threshold;
+	/// A queue of deletions to be processed after splitting a node.
+	std::vector<KeyT> deferred_deletions;
 };
 // -----------------------------------------------------------------
 /// A B-Tree that can buffer its deltas. Cannot just inherit from `BTree`
@@ -86,7 +88,9 @@ class BBBTree {
 	BBBTree(SegmentID segment_id, BufferManager &buffer_manager,
 			uint16_t wa_threshold)
 		: delta_tree(segment_id + 1, buffer_manager, wa_threshold),
-		  btree(segment_id, buffer_manager, &delta_tree) {}
+		  btree(segment_id, buffer_manager, &delta_tree) {
+		stats.wa_threshold = wa_threshold;
+	}
 
 	/// Lookup an entry in the tree. Returns `nullopt` if key was not found.
 	inline std::optional<ValueT> lookup(const KeyT &key) {

@@ -108,6 +108,8 @@ void BTree<KeyT, ValueT, UseDeltaTree>::erase(const KeyT &key,
 	leaf.erase(key, page_size);
 
 	buffer_manager.unfix_page(leaf_frame, true);
+
+	stats.num_deletions_index++;
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
@@ -150,6 +152,8 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::insert(const KeyT &key,
 			(required_node_size > page_size - InnerNode::min_space))
 			throw std::logic_error("BTree::insert(): Key too large.");
 	}
+
+	stats.num_insertions_index++;
 
 restart:
 	auto &leaf_frame = get_leaf(key, true);

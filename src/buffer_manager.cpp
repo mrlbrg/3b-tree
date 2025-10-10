@@ -33,6 +33,9 @@ BufferManager::BufferManager(size_t page_size, size_t page_count, bool clear)
 		page_frames.emplace_back(&(*data));
 		free_buffer_frames.push_back(&(page_frames.back()));
 	}
+
+	stats.page_size = page_size;
+	stats.num_pages = page_count;
 }
 // -----------------------------------------------------------------
 BufferManager::~BufferManager() { clear_all(); }
@@ -95,6 +98,7 @@ void BufferManager::load(BufferFrame &frame, SegmentID segment_id,
 
 	// TODO: Throw an error when not enough was read/written.
 	file.read_block(page_begin, page_size, frame.data);
+	stats.pages_loaded++;
 
 	if (frame.page_logic)
 		// Call the page logic after loading.

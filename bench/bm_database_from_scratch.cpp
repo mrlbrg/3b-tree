@@ -3,8 +3,7 @@
 #include "bbbtree/database.h"
 #include "bbbtree/stats.h"
 #include "bbbtree/types.h"
-
-#include <algorithm>
+// -----------------------------------------------------------------
 #include <benchmark/benchmark.h>
 #include <cstdint>
 #include <random>
@@ -67,10 +66,11 @@ void SetBenchmarkCounters(benchmark::State &state, const Stats &stats) {
 	state.counters["pages_written"] = stats.pages_written;
 	state.counters["pages_write_deferred"] = stats.pages_write_deferred;
 	state.counters["pages_created"] = stats.pages_created;
+	state.counters["slotted_pages_created"] = stats.slotted_pages_created;
 	// Add more as needed
 }
 // -----------------------------------------------------------------
-static void BM_DatabaseWithBTreeIndex(benchmark::State &state) {
+static void BM_DatabaseBTreeIndexFromScratch(benchmark::State &state) {
 	using DatabaseUnderTest = BTreeIndexedDB;
 
 	size_t num_tuples = state.range(0);
@@ -93,7 +93,7 @@ static void BM_DatabaseWithBTreeIndex(benchmark::State &state) {
 	SetBenchmarkCounters(state, stats);
 }
 // -----------------------------------------------------------------
-static void BM_DatabaseWithBBBTreeIndex(benchmark::State &state) {
+static void BM_DatabaseBBBTreeIndexFromScratch(benchmark::State &state) {
 	using DatabaseUnderTest = BBBTreeIndexedDB;
 
 	size_t num_tuples = state.range(0);
@@ -123,62 +123,112 @@ static void BM_DatabaseWithBBBTreeIndex(benchmark::State &state) {
 // 3: Page Size
 // -----------------------------------------------------------------
 // WA Threshold of 5
-BENCHMARK(BM_DatabaseWithBTreeIndex)
-	->Args({1'000, BENCH_NUM_PAGES, 5, BENCH_PAGE_SIZE});
-BENCHMARK(BM_DatabaseWithBBBTreeIndex)
-	->Args({1'000, BENCH_NUM_PAGES, 5, BENCH_PAGE_SIZE});
-BENCHMARK(BM_DatabaseWithBTreeIndex)
-	->Args({10'000, BENCH_NUM_PAGES, 5, BENCH_PAGE_SIZE});
-BENCHMARK(BM_DatabaseWithBBBTreeIndex)
-	->Args({10'000, BENCH_NUM_PAGES, 5, BENCH_PAGE_SIZE});
-BENCHMARK(BM_DatabaseWithBTreeIndex)
-	->Args({100'000, BENCH_NUM_PAGES, 5, BENCH_PAGE_SIZE});
-BENCHMARK(BM_DatabaseWithBBBTreeIndex)
-	->Args({100'000, BENCH_NUM_PAGES, 5, BENCH_PAGE_SIZE});
-// BENCHMARK(BM_DatabaseWithBTreeIndex)
-// 	->Args({1'000'000, BENCH_NUM_PAGES, 5, BENCH_PAGE_SIZE});
-// BENCHMARK(BM_DatabaseWithBBBTreeIndex)
-// 	->Args({1'000'000, BENCH_NUM_PAGES, 5, BENCH_PAGE_SIZE});
+BENCHMARK(BM_DatabaseBTreeIndexFromScratch)
+	->Args({1'000, BENCH_NUM_PAGES, 5, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK(BM_DatabaseBBBTreeIndexFromScratch)
+	->Args({1'000, BENCH_NUM_PAGES, 5, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK(BM_DatabaseBTreeIndexFromScratch)
+	->Args({10'000, BENCH_NUM_PAGES, 5, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK(BM_DatabaseBBBTreeIndexFromScratch)
+	->Args({10'000, BENCH_NUM_PAGES, 5, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK(BM_DatabaseBTreeIndexFromScratch)
+	->Args({100'000, BENCH_NUM_PAGES, 5, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK(BM_DatabaseBBBTreeIndexFromScratch)
+	->Args({100'000, BENCH_NUM_PAGES, 5, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+// BENCHMARK(BM_DatabaseBTreeIndexFromScratch)
+// 	->Args({1'000'000, BENCH_NUM_PAGES, 5, BENCH_PAGE_SIZE})
+// ->Iterations(1)->Repetitions(1);
+// BENCHMARK(BM_DatabaseBBBTreeIndexFromScratch)
+// 	->Args({1'000'000, BENCH_NUM_PAGES, 5, BENCH_PAGE_SIZE})
+// ->Iterations(1)->Repetitions(1);
 // -----------------------------------------------------------------
 // WA Threshold of 10
-BENCHMARK(BM_DatabaseWithBTreeIndex)
-	->Args({1'000, BENCH_NUM_PAGES, 10, BENCH_PAGE_SIZE});
-BENCHMARK(BM_DatabaseWithBBBTreeIndex)
-	->Args({1'000, BENCH_NUM_PAGES, 10, BENCH_PAGE_SIZE});
-BENCHMARK(BM_DatabaseWithBTreeIndex)
-	->Args({10'000, BENCH_NUM_PAGES, 10, BENCH_PAGE_SIZE});
-BENCHMARK(BM_DatabaseWithBBBTreeIndex)
-	->Args({10'000, BENCH_NUM_PAGES, 10, BENCH_PAGE_SIZE});
-BENCHMARK(BM_DatabaseWithBTreeIndex)
-	->Args({100'000, BENCH_NUM_PAGES, 10, BENCH_PAGE_SIZE});
-BENCHMARK(BM_DatabaseWithBBBTreeIndex)
-	->Args({100'000, BENCH_NUM_PAGES, 10, BENCH_PAGE_SIZE});
+BENCHMARK(BM_DatabaseBTreeIndexFromScratch)
+	->Args({1'000, BENCH_NUM_PAGES, 10, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK(BM_DatabaseBBBTreeIndexFromScratch)
+	->Args({1'000, BENCH_NUM_PAGES, 10, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK(BM_DatabaseBTreeIndexFromScratch)
+	->Args({10'000, BENCH_NUM_PAGES, 10, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK(BM_DatabaseBBBTreeIndexFromScratch)
+	->Args({10'000, BENCH_NUM_PAGES, 10, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK(BM_DatabaseBTreeIndexFromScratch)
+	->Args({100'000, BENCH_NUM_PAGES, 10, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK(BM_DatabaseBBBTreeIndexFromScratch)
+	->Args({100'000, BENCH_NUM_PAGES, 10, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
 // -----------------------------------------------------------------
 // WA Threshold of 20
-BENCHMARK(BM_DatabaseWithBTreeIndex)
-	->Args({1'000, BENCH_NUM_PAGES, 20, BENCH_PAGE_SIZE});
-BENCHMARK(BM_DatabaseWithBBBTreeIndex)
-	->Args({1'000, BENCH_NUM_PAGES, 20, BENCH_PAGE_SIZE});
-BENCHMARK(BM_DatabaseWithBTreeIndex)
-	->Args({10'000, BENCH_NUM_PAGES, 20, BENCH_PAGE_SIZE});
-BENCHMARK(BM_DatabaseWithBBBTreeIndex)
-	->Args({10'000, BENCH_NUM_PAGES, 20, BENCH_PAGE_SIZE});
-BENCHMARK(BM_DatabaseWithBTreeIndex)
-	->Args({100'000, BENCH_NUM_PAGES, 20, BENCH_PAGE_SIZE});
-BENCHMARK(BM_DatabaseWithBBBTreeIndex)
-	->Args({100'000, BENCH_NUM_PAGES, 20, BENCH_PAGE_SIZE});
+BENCHMARK(BM_DatabaseBTreeIndexFromScratch)
+	->Args({1'000, BENCH_NUM_PAGES, 20, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK(BM_DatabaseBBBTreeIndexFromScratch)
+	->Args({1'000, BENCH_NUM_PAGES, 20, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK(BM_DatabaseBTreeIndexFromScratch)
+	->Args({10'000, BENCH_NUM_PAGES, 20, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK(BM_DatabaseBBBTreeIndexFromScratch)
+	->Args({10'000, BENCH_NUM_PAGES, 20, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK(BM_DatabaseBTreeIndexFromScratch)
+	->Args({100'000, BENCH_NUM_PAGES, 20, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK(BM_DatabaseBBBTreeIndexFromScratch)
+	->Args({100'000, BENCH_NUM_PAGES, 20, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
 // -----------------------------------------------------------------
 // WA Threshold of 50
-BENCHMARK(BM_DatabaseWithBTreeIndex)
-	->Args({1'000, BENCH_NUM_PAGES, 50, BENCH_PAGE_SIZE});
-BENCHMARK(BM_DatabaseWithBBBTreeIndex)
-	->Args({1'000, BENCH_NUM_PAGES, 50, BENCH_PAGE_SIZE});
-BENCHMARK(BM_DatabaseWithBTreeIndex)
-	->Args({10'000, BENCH_NUM_PAGES, 50, BENCH_PAGE_SIZE});
-BENCHMARK(BM_DatabaseWithBBBTreeIndex)
-	->Args({10'000, BENCH_NUM_PAGES, 50, BENCH_PAGE_SIZE});
-BENCHMARK(BM_DatabaseWithBTreeIndex)
-	->Args({100'000, BENCH_NUM_PAGES, 50, BENCH_PAGE_SIZE});
-BENCHMARK(BM_DatabaseWithBBBTreeIndex)
-	->Args({100'000, BENCH_NUM_PAGES, 50, BENCH_PAGE_SIZE});
+BENCHMARK(BM_DatabaseBTreeIndexFromScratch)
+	->Args({1'000, BENCH_NUM_PAGES, 50, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK(BM_DatabaseBBBTreeIndexFromScratch)
+	->Args({1'000, BENCH_NUM_PAGES, 50, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK(BM_DatabaseBTreeIndexFromScratch)
+	->Args({10'000, BENCH_NUM_PAGES, 50, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK(BM_DatabaseBBBTreeIndexFromScratch)
+	->Args({10'000, BENCH_NUM_PAGES, 50, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK(BM_DatabaseBTreeIndexFromScratch)
+	->Args({100'000, BENCH_NUM_PAGES, 50, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK(BM_DatabaseBBBTreeIndexFromScratch)
+	->Args({100'000, BENCH_NUM_PAGES, 50, BENCH_PAGE_SIZE})
+	->Iterations(1)
+	->Repetitions(1);
 // -----------------------------------------------------------------

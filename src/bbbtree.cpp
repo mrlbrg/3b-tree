@@ -16,9 +16,8 @@ DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
 	// logger.log("DeltaTree::before_unload(): page " + std::to_string(page_id)
 	// + 		   " state " + 		   (state == State::DIRTY 				?
 	// "DIRTY" 				: (state == State::NEW ? "NEW" : "CLEAN")));
+
 	if (is_locked)
-		// throw std::logic_error("DeltaTree::before_unload(): Re-entrant
-		// call");
 		return {false, false}; // Do not allow unload when already
 							   // locked.
 
