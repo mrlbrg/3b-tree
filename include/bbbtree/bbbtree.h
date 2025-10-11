@@ -105,6 +105,11 @@ class BBBTree {
 		btree.erase(key, page_size);
 	}
 
+	/// Update an entry.
+	inline void update(const KeyT &key, const ValueT &value) {
+		btree.update(key, value);
+	}
+
 	/// Returns the number of key/value pairs stored in the B-tree.
 	inline size_t size() { return btree.size(); }
 

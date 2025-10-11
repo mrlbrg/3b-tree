@@ -121,7 +121,6 @@ void DeltaTree<KeyT, ValueT>::extract_deltas(const NodeT *node,
 								slot->get_value(node->get_data()));
 			break;
 		case OperationType::Updated:
-			assert(!node->is_leaf()); // Not supporting leaf node updates yet.
 			deltas.emplace_back(slot->state, slot->get_key(node->get_data()),
 								slot->get_value(node->get_data()));
 			break;
@@ -163,7 +162,6 @@ void DeltaTree<KeyT, ValueT>::apply_deltas(NodeT *node, const DeltasT &deltas,
 			auto success = node->insert(key, value);
 			assert(success);
 		} else if (op_type == OperationType::Updated) {
-			assert(!node->is_leaf()); // Not supporting leaf node updates yet.
 			node->update(key, value);
 		} else {
 			throw std::logic_error("DeltaTree::after_load(): "

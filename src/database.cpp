@@ -36,6 +36,7 @@ void Database<IndexT, KeyT>::insert(const Tuple &tuple) {
 	records.write(tid, reinterpret_cast<const std::byte *>(&tuple),
 				  sizeof(tuple));
 	stats.bytes_written_logically += sizeof(tuple);
+	stats.num_insertions_db++;
 }
 // -----------------------------------------------------------------
 template <template <typename, typename, bool> typename IndexT, typename KeyT>
@@ -49,6 +50,8 @@ void Database<IndexT, KeyT>::insert(const std::vector<Tuple> &tuples) {
 template <template <typename, typename, bool> typename IndexT, typename KeyT>
 	requires IndexInterface<IndexT, KeyT>
 Database<IndexT, KeyT>::Tuple Database<IndexT, KeyT>::get(const KeyT &key) {
+	stats.num_lookups_db++;
+
 	// Get TID for key
 	auto maybe_tid = index.lookup(key);
 	if (!maybe_tid.has_value())
@@ -68,8 +71,26 @@ Database<IndexT, KeyT>::Tuple Database<IndexT, KeyT>::get(const KeyT &key) {
 // -----------------------------------------------------------------
 template <template <typename, typename, bool> typename IndexT, typename KeyT>
 	requires IndexInterface<IndexT, KeyT>
+void Database<IndexT, KeyT>::update(const Tuple &tuple) {
+	// Get TID for key
+	auto maybe_tid = index.lookup(tuple.key);
+	if (!maybe_tid.has_value())
+		throw std::logic_error("Database::update(): Key not found.");
+	auto tid = maybe_tid.value();
+	// Update tuple in records
+	records.write(tid, reinterpret_cast<const std::byte *>(&tuple),
+				  sizeof(tuple));
+	stats.bytes_written_logically += sizeof(tuple);
+	stats.num_updates_db++;
+	// Update index
+	index.update(tuple.key, tid);
+}
+// -----------------------------------------------------------------
+template <template <typename, typename, bool> typename IndexT, typename KeyT>
+	requires IndexInterface<IndexT, KeyT>
 void Database<IndexT, KeyT>::erase(const KeyT & /*key*/) {
 	// TODO. Also update stats here.
+	++stats.num_deletions_db;
 	throw std::logic_error("Database<IndexT>::erase(): Not implemented yet.");
 }
 // -----------------------------------------------------------------

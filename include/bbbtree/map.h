@@ -26,6 +26,8 @@ template <typename KeyT, typename ValueT, bool UseDeltaTree = false> class Map {
 	void erase(const KeyT &key, size_t page_size);
 	/// Inserts a new entry into the tree. Returns false if key already exists.
 	[[nodiscard]] bool insert(const KeyT &key, const ValueT &value);
+	/// Updates the value for an existing key in the tree. Must already exist.
+	void update(const KeyT &key, const ValueT &value);
 	/// The number of values stored in the map.
 	size_t size() { return map.size(); }
 	/// Clears the map.

@@ -41,6 +41,7 @@ concept IndexInterface =
 		{ index.lookup(key) } -> std::same_as<std::optional<TID>>;
 		{ index.erase(key, page_size) } -> std::same_as<void>;
 		{ index.insert(key, value) } -> std::same_as<bool>;
+		{ index.update(key, value) } -> std::same_as<void>;
 	};
 // -----------------------------------------------------------------
 /// A Database maintains a single table of keys and values. The schema is
@@ -76,6 +77,8 @@ class Database {
 	/// Deletes a tuple by key from the database.
 	/// TODO: Implement erase.
 	void erase(const KeyT &key);
+	/// Updates a tuple by key in the database.
+	void update(const Tuple &tuple);
 	/// Returns the number of tuples stored in the database.
 	size_t size() { return index.size(); }
 	/// Sets the heights of the underlying index in the stats.

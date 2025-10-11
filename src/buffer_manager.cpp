@@ -128,8 +128,11 @@ BufferFrame &BufferManager::fix_page(SegmentID segment_id, PageID page_id,
 		--logger;
 		logger.log("}");
 #endif
+		stats.buffer_hits++;
 		return *(frame_it->second);
 	}
+
+	stats.buffer_misses++;
 
 	// Load page into buffer
 	auto &frame = get_free_frame();

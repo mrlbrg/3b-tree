@@ -131,6 +131,10 @@ struct BTree : public Segment {
 	/// Inserts a new entry into the tree. Returns false if key already exists.
 	[[nodiscard]] bool insert(const KeyT &key, const ValueT &value);
 
+	/// Updates the value for an existing key in the tree. Must already exist
+	/// and of the same size.
+	void update(const KeyT &key, const ValueT &value);
+
 	/// Print tree. Not thread-safe.
 	void print();
 

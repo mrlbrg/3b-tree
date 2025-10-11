@@ -29,6 +29,16 @@ bool Map<KeyT, ValueT, UseDeltaTree>::insert(const KeyT &key,
 	return success;
 }
 // -----------------------------------------------------------------
+template <typename KeyT, typename ValueT, bool UseDeltaTree>
+void Map<KeyT, ValueT, UseDeltaTree>::update(const KeyT &key,
+											 const ValueT &value) {
+	auto it = map.find(key);
+	if (it == map.end())
+		throw std::logic_error("Map::update(): Key not found.");
+
+	it->second = value;
+}
+// -----------------------------------------------------------------
 // Explicit instantiations
 template class Map<UInt64, TID>;
 template class Map<String, TID>;

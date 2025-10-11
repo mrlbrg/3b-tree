@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <iostream>
 #include <unordered_map>
 
@@ -16,7 +17,7 @@ struct Stats {
 
 	// The number of bytes that were changed by a user logically.
 	size_t bytes_written_logically = 0;
-	// The number of bytes that were actually changed physically in memory.
+	// The number of bytes that were actually changed physically in storage.
 	size_t bytes_written_physically = 0;
 
 	// Counts every time a new page is created in the system.
@@ -35,6 +36,11 @@ struct Stats {
 	// in-memory instead of written to disk.
 	size_t pages_write_deferred = 0;
 
+	// Counts the number of buffer hits.
+	size_t buffer_hits = 0;
+	// Counts the number of buffer misses.
+	size_t buffer_misses = 0;
+
 	// Tracks the maximum height of the B-Tree.
 	size_t b_tree_height = 0;
 	// Tracks the maximum height of the Delta Tree.
@@ -46,12 +52,23 @@ struct Stats {
 	size_t page_size = 0;
 	// The number of pages in the buffer pool.
 	size_t num_pages = 0;
+
 	// The number of insertions performed on the database.
 	size_t num_insertions_db = 0;
+	// The number of updates performed on the database.
+	size_t num_updates_db = 0;
+	// The number of lookups performed on the database.
+	size_t num_lookups_db = 0;
+	// The number of deletions performed on the database.
+	size_t num_deletions_db = 0;
 	// The number of insertions performed on the index.
 	size_t num_insertions_index = 0;
 	// The number of deletions performed on the index.
 	size_t num_deletions_index = 0;
+	// The number of lookups performed on the index.
+	size_t num_lookups_index = 0;
+	// The number of updates performed on the index.
+	size_t num_updates_index = 0;
 
 	// Resets all stats to zero.
 	void clear();

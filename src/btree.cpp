@@ -85,6 +85,8 @@ void BTree<KeyT, ValueT, UseDeltaTree>::clear() {
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 std::optional<ValueT>
 BTree<KeyT, ValueT, UseDeltaTree>::lookup(const KeyT &key) {
+	stats.num_lookups_index++;
+
 	auto &leaf_frame = get_leaf(key, false);
 	auto &leaf = *reinterpret_cast<LeafNode *>(leaf_frame.get_data());
 
@@ -179,6 +181,16 @@ restart:
 	assert(lookup(key).value() == value);
 
 	return true;
+}
+// -----------------------------------------------------------------
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+void BTree<KeyT, ValueT, UseDeltaTree>::update(const KeyT &key,
+											   const ValueT &value) {
+	auto &leaf_frame = get_leaf(key, true);
+	auto &leaf = *reinterpret_cast<LeafNode *>(leaf_frame.get_data());
+	leaf.update(key, value);
+	buffer_manager.unfix_page(leaf_frame, true);
+	stats.num_updates_index++;
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
@@ -923,9 +935,30 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::insert(
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
-void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::update(
-	const KeyT & /*key*/, const ValueT & /*value*/) {
-	throw std::logic_error("Not implemented yet.");
+void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::update(const KeyT &key,
+														 const ValueT &value) {
+	auto *slot = lower_bound(key);
+	if (slot == slots_end())
+		throw std::runtime_error("LeafNode::update: Key not found");
+
+	auto &found_key = slot->get_key(this->get_data());
+	if (found_key != key)
+		throw std::runtime_error("LeafNode::update: Key not found");
+
+	// Overwrite value in place if it has the same size.
+	if (value.size() != slot->value_size)
+		throw std::runtime_error("LeafNode::update: Updating to a value of "
+								 "different size is not supported");
+
+	value.serialize(this->get_data() + slot->offset + slot->key_size);
+
+	// Track delta.
+	if constexpr (UseDeltaTree) {
+		if (slot->state != OperationType::Inserted) {
+			slot->state = OperationType::Updated;
+			this->num_bytes_changed += value.size();
+		}
+	}
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
