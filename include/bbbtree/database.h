@@ -60,6 +60,7 @@ class Database {
 
 		/// Spaceship operator.
 		auto operator<=>(const Tuple &) const = default;
+		size_t size() const { return sizeof(key) + sizeof(value); }
 	};
 
 	/// Constructor.

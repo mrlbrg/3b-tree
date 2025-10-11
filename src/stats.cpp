@@ -43,6 +43,7 @@ std::unordered_map<std::string, size_t> Stats::get_stats() const {
 							  bytes_written_logically)},
 			{"pages_evicted", pages_evicted},
 			{"pages_written", pages_written},
+			{"total_page_io", pages_written + pages_loaded},
 			{"pages_write_deferred", pages_write_deferred},
 			{"b_tree_height", b_tree_height},
 			{"delta_tree_height", delta_tree_height},

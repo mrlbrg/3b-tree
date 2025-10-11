@@ -152,7 +152,6 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::insert(const KeyT &key,
 			(required_node_size > page_size - InnerNode::min_space))
 			throw std::logic_error("BTree::insert(): Key too large.");
 	}
-	++stats.num_insertions_index;
 restart:
 	auto &leaf_frame = get_leaf(key, true);
 	auto &leaf = *reinterpret_cast<LeafNode *>(leaf_frame.get_data());
@@ -176,6 +175,8 @@ restart:
 	assert(lookup(key).has_value());
 	assert(lookup(key).value() == value);
 
+	++stats.num_insertions_index;
+
 	return true;
 }
 // -----------------------------------------------------------------
@@ -183,6 +184,7 @@ template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 void BTree<KeyT, ValueT, UseDeltaTree>::update(const KeyT &key,
 											   const ValueT &value) {
 	++stats.num_updates_index;
+
 	auto &leaf_frame = get_leaf(key, true);
 	auto &leaf = *reinterpret_cast<LeafNode *>(leaf_frame.get_data());
 	leaf.update(key, value);

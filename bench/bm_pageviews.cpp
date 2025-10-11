@@ -34,12 +34,16 @@ static void BM_PageViews_Insert_DB(benchmark::State &state) {
 	DatabaseUnderTest db{page_size, num_pages, wa_threshold, true};
 
 	// Propagate the database with pageview keys
-	static const static std::vector<uint64_t> keys =
+	static const std::vector<uint64_t> keys =
 		LoadPageviewKeys("pageviews_en_sample_1.csv");
 
 	for (auto _ : state) {
-		for (auto key : keys)
-			db.insert({key, 0}); // Value is dummy
+		for (auto key : keys) {
+			typename DatabaseUnderTest::Tuple tuple = {key,
+													   0}; // Value is dummy
+			db.insert(tuple);							   // Value is dummy
+			stats.bytes_written_logically += tuple.size();
+		}
 	}
 
 	db.set_height();
@@ -106,12 +110,17 @@ static void BM_PageViews_Mixed_DB(benchmark::State &state) {
 	for (auto _ : state) {
 		for (const auto &op : ops) {
 			switch (op.op_type) {
-			case 'L':
+			case 'L': {
 				benchmark::DoNotOptimize(db.get(op.row_number));
 				break;
-			case 'U':
-				db.update({op.row_number, 0}); // Value is dummy
+			}
+			case 'U': {
+				typename DatabaseUnderTest::Tuple tuple = {op.row_number,
+														   0}; // Value is dummy
+				db.update(tuple);
+				stats.bytes_written_logically += tuple.size();
 				break;
+			}
 			default:
 				throw std::logic_error("Unknown operation type in workload.");
 			}
@@ -154,9 +163,14 @@ static void BM_PageViews_Mixed_Index(benchmark::State &state) {
 			case 'L':
 				benchmark::DoNotOptimize(index.lookup(op.row_number));
 				break;
-			case 'U':
-				index.update(op.row_number, 0); // Value is dummy
+			case 'U': {
+				TID value = 0; // Value is dummy
+				KeyT key = op.row_number;
+
+				index.update(key, value);
+				stats.bytes_written_logically += key.size() + value.size();
 				break;
+			}
 			default:
 				throw std::logic_error("Unknown operation type in workload.");
 			}
@@ -184,7 +198,10 @@ static void BM_PageViews_Insert_Index(benchmark::State &state) {
 
 	for (auto _ : state) {
 		for (auto key : keys) {
-			auto success = index.insert(key, 0); // Value is dummy
+			TID value = 0; // Value is dummy
+			KeyT k = key;
+			auto success = index.insert(k, value);
+			stats.bytes_written_logically += k.size() + value.size();
 			assert(success);
 		}
 	}
@@ -273,29 +290,35 @@ BENCHMARK_TEMPLATE(BM_PageViews_Mixed_DB, BBBTreeDB)
 	->Repetitions(1);
 // -----------------------------------------------------------------
 BENCHMARK_TEMPLATE(BM_PageViews_Mixed_Index, BTreeIndex)
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
+	->Args({20, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
+	->Args({50, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
+	->Args({100, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
+	->Args({200, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
 	->Iterations(1)
 	->Repetitions(1);
 BENCHMARK_TEMPLATE(BM_PageViews_Mixed_Index, BBBTreeIndex)
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
+	->Args({20, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
+	->Args({50, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
+	->Args({100, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
+	->Args({200, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
 	->Iterations(1)
 	->Repetitions(1);
 // -----------------------------------------------------------------
-BENCHMARK_TEMPLATE(BM_PageViews_Insert_Index, BTreeIndex)
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
-	->Iterations(1)
-	->Repetitions(1);
-BENCHMARK_TEMPLATE(BM_PageViews_Insert_Index, BBBTreeIndex)
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
-	->Iterations(1)
-	->Repetitions(1);
-// -----------------------------------------------------------------
-BENCHMARK_TEMPLATE(BM_PageViews_Lookup_Index, BTreeIndex)
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
-	->Iterations(1)
-	->Repetitions(1);
-BENCHMARK_TEMPLATE(BM_PageViews_Lookup_Index, BBBTreeIndex)
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
-	->Iterations(1)
-	->Repetitions(1);
-// -----------------------------------------------------------------
+// BENCHMARK_TEMPLATE(BM_PageViews_Insert_Index, BTreeIndex)
+// 	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
+// 	->Iterations(1)
+// 	->Repetitions(1);
+// BENCHMARK_TEMPLATE(BM_PageViews_Insert_Index, BBBTreeIndex)
+// 	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
+// 	->Iterations(1)
+// 	->Repetitions(1);
+// // -----------------------------------------------------------------
+// BENCHMARK_TEMPLATE(BM_PageViews_Lookup_Index, BTreeIndex)
+// 	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
+// 	->Iterations(1)
+// 	->Repetitions(1);
+// BENCHMARK_TEMPLATE(BM_PageViews_Lookup_Index, BBBTreeIndex)
+// 	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
+// 	->Iterations(1)
+// 	->Repetitions(1);
+// // -----------------------------------------------------------------

@@ -24,7 +24,7 @@ template <template <typename, typename, bool> typename IndexT, typename KeyT>
 	requires IndexInterface<IndexT, KeyT>
 void Database<IndexT, KeyT>::insert(const Tuple &tuple) {
 	// Get a new TID
-	auto tid = records.allocate(sizeof(tuple));
+	auto tid = records.allocate(tuple.size());
 	// Add TID to index
 	auto success = index.insert(tuple.key, tid);
 	if (!success) {
@@ -34,8 +34,7 @@ void Database<IndexT, KeyT>::insert(const Tuple &tuple) {
 	}
 	// Insert tuple in records
 	records.write(tid, reinterpret_cast<const std::byte *>(&tuple),
-				  sizeof(tuple));
-	stats.bytes_written_logically += sizeof(tuple);
+				  tuple.size());
 	stats.num_insertions_db++;
 }
 // -----------------------------------------------------------------
@@ -61,9 +60,9 @@ Database<IndexT, KeyT>::Tuple Database<IndexT, KeyT>::get(const KeyT &key) {
 	// Get Tuple
 	Tuple tuple{};
 	auto bytes_read =
-		records.read(tid, reinterpret_cast<std::byte *>(&tuple), sizeof(tuple));
+		records.read(tid, reinterpret_cast<std::byte *>(&tuple), tuple.size());
 
-	if (bytes_read != sizeof(tuple))
+	if (bytes_read != tuple.size())
 		throw std::logic_error("Database<IndexT>::get(): Read corrupted.");
 
 	return tuple;
@@ -79,8 +78,7 @@ void Database<IndexT, KeyT>::update(const Tuple &tuple) {
 	auto tid = maybe_tid.value();
 	// Update tuple in records
 	records.write(tid, reinterpret_cast<const std::byte *>(&tuple),
-				  sizeof(tuple));
-	stats.bytes_written_logically += sizeof(tuple);
+				  tuple.size());
 	stats.num_updates_db++;
 	// Update index
 	index.update(tuple.key, tid);

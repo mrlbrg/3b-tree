@@ -14,6 +14,10 @@ benchmark_info = {
         "caption": "BM_PageViews_Mixed_DB",
         "label": "tab:bm_pageviews_mixed_db",
     },
+    "BM_PageViews_Mixed_Index": {
+        "caption": "BM_PageViews_Mixed_Index",
+        "label": "tab:bm_pageviews_mixed_index",
+    },
 }
 
 # Order and grouping of metrics for table rows
@@ -37,6 +41,7 @@ row_groups = [
         "pages_loaded",
         "pages_write_deferred",
         "pages_written",
+        "total_page_io",
     ],
 ]
 
@@ -70,15 +75,16 @@ pretty = {
     "pages_loaded": "Num. Pages Loaded",
     "pages_write_deferred": "Num. Pages Write Deferred",
     "pages_written": "Num. Pages Written",
+    "total_page_io": "Total Page I/O",
 }
 
 
 # Helper to extract the index type from the benchmark name
 def get_index_type(name):
-    if "<BTreeIndexed>" in name:
-        return "BTreeIndexed"
-    elif "<BBBTreeIndexed>" in name:
-        return "BBBTreeIndexed"
+    if "BBBTree" in name:
+        return "BBBTree"
+    elif "BTree" in name:
+        return "BTree"
     return None
 
 
@@ -89,6 +95,8 @@ def get_benchmark_base(name):
         return "BM_PageViews_Lookup_DB"
     if name.startswith("BM_PageViews_Mixed_DB"):
         return "BM_PageViews_Mixed_DB"
+    if name.startswith("BM_PageViews_Mixed_Index"):
+        return "BM_PageViews_Mixed_Index"
     return None
 
 
@@ -139,8 +147,8 @@ def main():
         print("\\midrule")
         for i, group in enumerate(row_groups):
             for metric in group:
-                v1 = idxs["BTreeIndexed"].get(metric, 0)
-                v2 = idxs["BBBTreeIndexed"].get(metric, 0)
+                v1 = idxs["BTree"].get(metric, 0)
+                v2 = idxs["BBBTree"].get(metric, 0)
                 print(
                     f"{esc(pretty[metric])} & {format_val(v1)} & {format_val(v2)} \\\\"
                 )

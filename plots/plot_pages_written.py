@@ -3,12 +3,17 @@ import matplotlib.pyplot as plt
 
 
 def main():
-    filename = "plots/results.json"
+    filename = "plots/pageviews_results.json"
     output_path = "plots/benchmark_results_pages_written.png"
 
+    # selected_benchmarks = {
+    #     "BM_PageViews_Mixed_DB<BTreeDB>/100/4096/5/iterations:1/repeats:1": "B-Tree",
+    #     "BM_PageViews_Mixed_DB<BBBTreeDB>/100/4096/5/iterations:1/repeats:1": "BBB-Tree",
+    # }
+
     selected_benchmarks = {
-        "BM_PageViews_Mixed_DB<BTreeIndexed>/100/4096/5/iterations:1/repeats:1": "B-Tree",
-        "BM_PageViews_Mixed_DB<BBBTreeIndexed>/100/4096/5/iterations:1/repeats:1": "BBB-Tree",
+        "BM_PageViews_Mixed_Index<BTreeIndex>/100/4096/5/iterations:1/repeats:1": "B-Tree",
+        "BM_PageViews_Mixed_Index<BBBTreeIndex>/100/4096/5/iterations:1/repeats:1": "BBB-Tree",
     }
 
     with open(filename) as f:
@@ -36,10 +41,12 @@ def main():
     colors = ["#E69F00" if n == "BBB-Tree" else "#0072B2" for n in names]
     bars = plt.bar(names, pages_written, color=colors)
     caption = f"\n[Page Size: {int(page_size / 1024)} KB, Max. Pages in Buffer: {int(num_pages)}, WA Threshold: {int(wa_threshold)}%]"
-    plt.ylabel(f"Number of Page Writes")
-    plt.xlabel(caption)
-    plt.title(f"Write Amplification per Index")
-    plt.figtext(0.5, -0.08, caption, ha="center", fontsize=10)
+    plt.ylabel(f"Number of Page Writes", fontsize=16)
+    # plt.xlabel(caption, fontsize=16)
+    plt.title(f"Write Amplification per Index", fontsize=16)
+    # plt.figtext(0.5, -0.08, caption, ha="center", fontsize=16)
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
     plt.tight_layout()
     plt.savefig(output_path)
     plt.close()
