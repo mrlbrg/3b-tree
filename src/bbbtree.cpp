@@ -13,15 +13,13 @@ template <KeyIndexable KeyT, ValueIndexable ValueT>
 std::pair<bool, bool>
 DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
 									   PageID page_id, size_t page_size) {
-	// logger.log("DeltaTree::before_unload(): page " + std::to_string(page_id)
-	// + 		   " state " + 		   (state == State::DIRTY 				?
-	// "DIRTY" 				: (state == State::NEW ? "NEW" : "CLEAN")));
-
-	if (is_locked)
-		return {false, false}; // Do not allow unload when already
-							   // locked.
-
-	is_locked = true;
+#ifndef NDEBUG
+	logger.log("DeltaTree::before_unload(): page " + std::to_string(page_id) +
+			   " state " +
+			   (state == State::DIRTY
+					? "DIRTY"
+					: (state == State::NEW ? "NEW" : "CLEAN")));
+#endif
 
 	// Clean the slots of their dirty state when writing the node out.
 	auto *node = reinterpret_cast<const Node *>(data);
@@ -29,20 +27,26 @@ DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
 	// Pages with many updates are always written out.
 	bool has_many_updates = node->get_update_ratio(page_size) > wa_threshold;
 	bool is_new = (state == State::NEW);
-	bool force_write_out = is_new || has_many_updates;
+	bool force_write_out = is_new || has_many_updates || is_locked;
 
 	// Erase any buffered deltas for this page, since we are going to write it
-	// out now.
-	if (has_many_updates)
+	// out now. If the tree is already locked, we cannot modify it now.
+	if (is_locked) {
+		deferred_deletions.push_back(page_id);
+	} else if (has_many_updates) {
+		is_locked = true;
 		this->erase(page_id, page_size);
+		is_locked = false;
+	}
 
 	// Remove any tracking information on the node, since we are going to write
 	// it out now.
 	if (force_write_out) {
 		clean_node(reinterpret_cast<Node *>(data));
-		is_locked = false;
 		return {true, true};
 	}
+
+	is_locked = true;
 
 	assert(state == State::DIRTY);
 	assert(node->num_bytes_changed > 0);
@@ -53,6 +57,10 @@ DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
 
 	//  Scan all slots in the node and insert the deltas in the delta tree.
 	store_deltas(page_id, reinterpret_cast<const Node *>(data));
+
+	// Apply any deferred deletions now.
+	erase_deferred_deletions();
+
 	is_locked = false;
 
 	++stats.pages_write_deferred;
@@ -69,6 +77,8 @@ void DeltaTree<KeyT, ValueT>::after_load(char *data, PageID page_id) {
 	auto maybe_deltas = this->lookup(page_id);
 	// No deltas found. Do nothing.
 	if (!maybe_deltas.has_value()) {
+		// Apply any deferred deletions now.
+		erase_deferred_deletions();
 		is_locked = false;
 		return;
 	}
@@ -86,6 +96,9 @@ void DeltaTree<KeyT, ValueT>::after_load(char *data, PageID page_id) {
 					 deltas.slot_count);
 		inner_node->upper = deltas.upper;
 	}
+
+	// Apply any deferred deletions now.
+	erase_deferred_deletions();
 
 	is_locked = false;
 }
@@ -215,6 +228,16 @@ void DeltaTree<KeyT, ValueT>::apply_deltas(NodeT *node, const DeltasT &deltas,
 
 	// Cut off the slots that were split.
 	node->slot_count = slot_count;
+}
+// -----------------------------------------------------------------
+template <KeyIndexable KeyT, ValueIndexable ValueT>
+void DeltaTree<KeyT, ValueT>::erase_deferred_deletions() {
+	assert(is_locked);
+	while (!deferred_deletions.empty()) {
+		auto page_id = deferred_deletions.back();
+		deferred_deletions.pop_back();
+		this->erase(page_id, this->buffer_manager.page_size);
+	}
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>

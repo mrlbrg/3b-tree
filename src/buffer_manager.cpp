@@ -287,8 +287,7 @@ void BufferManager::clear_all(bool write_back) {
 	}
 restart:
 	for (const auto &[page_id, frame] : id_to_frame) {
-		auto success = remove(*frame, write_back);
-		// assert(success);
+		remove(*frame, write_back);
 	}
 	// During `unload` of BTree nodes, some pages might have been loaded
 	// into the buffer to store the deltas. Therefore we might have to go

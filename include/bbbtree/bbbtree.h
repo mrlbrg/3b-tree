@@ -63,6 +63,9 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 	/// Calls the correct extraction code for the node type.
 	void store_deltas(PageID page_id, const Node *node);
 
+	/// Erase deferred deletions when the tree is unlocked.
+	void erase_deferred_deletions();
+
 	/// Locking mechanism to prevent re-entrant calls to (un)load functions.
 	/// When a page is unloaded/loaded (`before_unload`), we must prevent a
 	/// subcall to unload as well to make space for the delta tree nodes.
@@ -75,7 +78,7 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 	/// in a node is below this threshold, we buffer the changes in this tree.
 	const uint16_t wa_threshold;
 	/// A queue of deletions to be processed after splitting a node.
-	std::vector<KeyT> deferred_deletions;
+	std::vector<PID> deferred_deletions;
 };
 // -----------------------------------------------------------------
 /// A B-Tree that can buffer its deltas. Cannot just inherit from `BTree`

@@ -796,12 +796,12 @@ struct SeedableTree : public IndexT<KeyT, ValueT> {
 TEST_F(BBBTreeTest, LargeIntTree) {
 	std::srand(42);
 	static const constexpr size_t page_size = 128;
-	static const constexpr uint16_t wa_threshold = 10;
+	static const constexpr uint16_t wa_threshold = 20;
 
 	std::unique_ptr<BufferManager> buffer_manager =
 		std::make_unique<BufferManager>(page_size, TEST_NUM_PAGES, true);
-	SeedableTree<BBBTree, UInt64, TID, page_size> tree{TEST_SEGMENT_ID,
-													   *buffer_manager, 20};
+	SeedableTree<BBBTree, UInt64, TID, page_size> tree{
+		TEST_SEGMENT_ID, *buffer_manager, wa_threshold};
 
 	tree.seed(10'000);
 	// logger.log(tree);
