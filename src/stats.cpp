@@ -36,6 +36,11 @@ std::unordered_map<std::string, size_t> Stats::get_stats() const {
 			{"node_splits", inner_node_splits + leaf_node_splits},
 			{"bytes_written_logically", bytes_written_logically},
 			{"bytes_written_physically", bytes_written_physically},
+			{"write_amplification",
+			 bytes_written_logically == 0
+				 ? 0
+				 : std::round(static_cast<double>(bytes_written_physically) /
+							  bytes_written_logically)},
 			{"pages_evicted", pages_evicted},
 			{"pages_written", pages_written},
 			{"pages_write_deferred", pages_write_deferred},

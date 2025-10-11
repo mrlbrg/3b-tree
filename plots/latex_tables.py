@@ -3,15 +3,15 @@ import json
 # Mapping for each benchmark to its display name, caption, and label
 benchmark_info = {
     "BM_PageViews_Insert_DB": {
-        "caption": "BM_PageViews_Insert_DBB-Tree",
+        "caption": "BM_PageViews_Insert_DB",
         "label": "tab:bm_pageviews_insert_db",
     },
     "BM_PageViews_Lookup_DB": {
-        "caption": "BM_PageViews_Lookup_DBB-Tree",
+        "caption": "BM_PageViews_Lookup_DB",
         "label": "tab:bm_pageviews_lookup_db",
     },
     "BM_PageViews_Mixed_DB": {
-        "caption": "BM_PageViews_Mixed_DBB-Tree",
+        "caption": "BM_PageViews_Mixed_DB",
         "label": "tab:bm_pageviews_mixed_db",
     },
 }
@@ -20,17 +20,15 @@ benchmark_info = {
 row_groups = [
     ["page_size", "num_pages", "wa_threshold"],
     ["real_time", "cpu_time"],
+    ["num_lookups_db", "num_insertions_db", "num_updates_db"],
     [
-        "num_lookups_db",
-        "num_insertions_db",
-        "num_updates_db",
         "num_lookups_index",
         "num_insertions_index",
         "num_updates_index",
         "num_deletions_index",
     ],
     ["b_tree_height", "delta_tree_height", "node_splits"],
-    ["bytes_written_logically", "bytes_written_physically"],
+    ["bytes_written_logically", "bytes_written_physically", "write_amplification"],
     ["buffer_accesses", "buffer_hits", "buffer_misses"],
     [
         "pages_created",
@@ -45,7 +43,7 @@ row_groups = [
 # Mapping for pretty metric names
 pretty = {
     "page_size": "Page Size [bytes]",
-    "wa_threshold": "Write Amplification Threshold",
+    "wa_threshold": "Write Threshold [\\%]",
     "real_time": "Real Time (ns)",
     "cpu_time": "CPU Time (ns)",
     "num_deletions_index": "Number of Deletions (Index)",
@@ -62,6 +60,7 @@ pretty = {
     "node_splits": "Node Splits",
     "bytes_written_logically": "Bytes Written (Logically)",
     "bytes_written_physically": "Bytes Written (Physically)",
+    "write_amplification": "Write Amplification",
     "buffer_accesses": "Buffer Accesses",
     "buffer_hits": "Buffer Hits [\\%]",
     "buffer_misses": "Buffer Misses [\\%]",
@@ -104,7 +103,7 @@ def format_val(val):
 
 
 def main():
-    with open("plots/results.json") as f:
+    with open("plots/pageviews_results.json") as f:
         data = json.load(f)
     benchmarks = data["benchmarks"]
     # Organize by benchmark base and index type

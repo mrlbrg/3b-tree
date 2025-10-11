@@ -85,8 +85,7 @@ void BTree<KeyT, ValueT, UseDeltaTree>::clear() {
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 std::optional<ValueT>
 BTree<KeyT, ValueT, UseDeltaTree>::lookup(const KeyT &key) {
-	stats.num_lookups_index++;
-
+	++stats.num_lookups_index;
 	auto &leaf_frame = get_leaf(key, false);
 	auto &leaf = *reinterpret_cast<LeafNode *>(leaf_frame.get_data());
 
@@ -102,6 +101,7 @@ template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 void BTree<KeyT, ValueT, UseDeltaTree>::erase(const KeyT &key,
 											  size_t page_size) {
 	assert(!UseDeltaTree && "Erase not supported with delta tree yet.");
+	++stats.num_deletions_index;
 
 	auto &leaf_frame = get_leaf(key, true);
 	auto &leaf = *reinterpret_cast<LeafNode *>(leaf_frame.get_data());
@@ -110,8 +110,6 @@ void BTree<KeyT, ValueT, UseDeltaTree>::erase(const KeyT &key,
 	leaf.erase(key, page_size);
 
 	buffer_manager.unfix_page(leaf_frame, true);
-
-	stats.num_deletions_index++;
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
@@ -154,9 +152,7 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::insert(const KeyT &key,
 			(required_node_size > page_size - InnerNode::min_space))
 			throw std::logic_error("BTree::insert(): Key too large.");
 	}
-
-	stats.num_insertions_index++;
-
+	++stats.num_insertions_index;
 restart:
 	auto &leaf_frame = get_leaf(key, true);
 	auto &leaf = *reinterpret_cast<LeafNode *>(leaf_frame.get_data());
@@ -186,11 +182,11 @@ restart:
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 void BTree<KeyT, ValueT, UseDeltaTree>::update(const KeyT &key,
 											   const ValueT &value) {
+	++stats.num_updates_index;
 	auto &leaf_frame = get_leaf(key, true);
 	auto &leaf = *reinterpret_cast<LeafNode *>(leaf_frame.get_data());
 	leaf.update(key, value);
 	buffer_manager.unfix_page(leaf_frame, true);
-	stats.num_updates_index++;
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
@@ -205,7 +201,7 @@ PageID BTree<KeyT, ValueT, UseDeltaTree>::get_new_page() {
 
 	buffer_manager.unfix_page(frame, true);
 
-	stats.pages_created++;
+	++stats.pages_created;
 
 	return page_id;
 }
@@ -901,6 +897,7 @@ bool BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::insert(
 	const KeyT &key, const ValueT &value, bool allow_duplicates) {
 	assert(has_space(key, value));
 	assert(!allow_duplicates); // Never allow duplicates for leafs.
+
 	// Find insert position.
 	auto *slot_target = lower_bound(key);
 	if (slot_target != slots_end()) {

@@ -84,11 +84,12 @@ class Database {
 	/// Sets the heights of the underlying index in the stats.
 	void set_height() { index.set_height(); }
 
-	void clear() {
-		buffer_manager.clear_all(false);
+	void clear(bool write_back = false) {
+		buffer_manager.clear_all(write_back);
 		space_inventory.clear();
 		index.clear();
 	}
+	void clear_bm(bool write_back) { buffer_manager.clear_all(write_back); }
 
   private:
 	/// The buffer manager. Note that the buffer manager must be the first
