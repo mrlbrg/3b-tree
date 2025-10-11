@@ -44,3 +44,7 @@ log.txt
 
 # MacOS files
 .DS_Store
+
+# Benchmarks
+*.png
+*.json
