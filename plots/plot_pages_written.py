@@ -4,17 +4,17 @@ import matplotlib.pyplot as plt
 
 def main():
     filename = "plots/pageviews_results.json"
-    output_path = "plots/benchmark_results_pages_written.png"
-
-    # selected_benchmarks = {
-    #     "BM_PageViews_Mixed_DB<BTreeDB>/100/4096/5/iterations:1/repeats:1": "B-Tree",
-    #     "BM_PageViews_Mixed_DB<BBBTreeDB>/100/4096/5/iterations:1/repeats:1": "BBB-Tree",
-    # }
+    output_path = "plots/pages_written_per_db.png"
 
     selected_benchmarks = {
-        "BM_PageViews_Mixed_Index<BTreeIndex>/100/4096/5/iterations:1/repeats:1": "B-Tree",
-        "BM_PageViews_Mixed_Index<BBBTreeIndex>/100/4096/5/iterations:1/repeats:1": "BBB-Tree",
+        "BM_PageViews_Mixed_DB<BTreeDB>/500/4096/5/iterations:1/repeats:1": "B-Tree",
+        "BM_PageViews_Mixed_DB<BBBTreeDB>/500/4096/5/iterations:1/repeats:1": "BBB-Tree",
     }
+
+    # selected_benchmarks = {
+    #     "BM_PageViews_Mixed_Index<BTreeIndex>/500/4096/5/iterations:1/repeats:1": "B-Tree",
+    #     "BM_PageViews_Mixed_Index<BBBTreeIndex>/500/4096/5/iterations:1/repeats:1": "BBB-Tree",
+    # }
 
     with open(filename) as f:
         data = json.load(f)
