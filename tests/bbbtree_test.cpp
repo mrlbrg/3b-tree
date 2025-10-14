@@ -645,7 +645,7 @@ struct SeedableTree : public IndexT<KeyT, ValueT> {
 
 	/// Constructor.
 	SeedableTree(SegmentID segment_id, BufferManager &buffer_manager,
-				 uint16_t wa_threshold)
+				 float wa_threshold)
 		: BBBTree<KeyT, ValueT>(segment_id, buffer_manager, wa_threshold) {
 		stats.clear();
 	}
@@ -796,7 +796,7 @@ struct SeedableTree : public IndexT<KeyT, ValueT> {
 TEST_F(BBBTreeTest, LargeIntTree) {
 	std::srand(42);
 	static const constexpr size_t page_size = 128;
-	static const constexpr uint16_t wa_threshold = 20;
+	static const constexpr float wa_threshold = 0.2;
 
 	std::unique_ptr<BufferManager> buffer_manager =
 		std::make_unique<BufferManager>(page_size, TEST_NUM_PAGES, true);

@@ -40,7 +40,7 @@ def main():
     # Color BBB-Tree in orange, others default
     colors = ["#E69F00" if n == "BBB-Tree" else "#0072B2" for n in names]
     bars = plt.bar(names, pages_written, color=colors)
-    caption = f"\n[Page Size: {int(page_size / 1024)} KB, Max. Pages in Buffer: {int(num_pages)}, WA Threshold: {int(wa_threshold)}%]"
+    caption = f"\n[Page Size: {int(page_size / 1024)} KB, Max. Pages in Buffer: {int(num_pages)}, WA Threshold: {wa_threshold}%]"
     plt.ylabel(f"Number of Page Writes", fontsize=16)
     # plt.xlabel(caption, fontsize=16)
     plt.title(f"Write Amplification per Index", fontsize=16)

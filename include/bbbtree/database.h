@@ -36,7 +36,7 @@ template <template <typename, typename, bool = false> class IndexT,
 concept IndexInterface =
 	requires(IndexT<KeyT, TID> index, const KeyT &key, const TID &value,
 			 size_t page_size, SegmentID segment_id,
-			 BufferManager &buffer_manager, uint16_t wa_threshold) {
+			 BufferManager &buffer_manager, float wa_threshold) {
 		{ IndexT<KeyT, TID>(segment_id, buffer_manager, wa_threshold) };
 		{ index.lookup(key) } -> std::same_as<std::optional<TID>>;
 		{ index.erase(key, page_size) } -> std::same_as<void>;
@@ -64,7 +64,7 @@ class Database {
 	};
 
 	/// Constructor.
-	Database(size_t page_size, size_t num_pages, uint16_t wa_threshold,
+	Database(size_t page_size, size_t num_pages, float wa_threshold,
 			 bool reset);
 
 	/// Inserts a tuple into the database.

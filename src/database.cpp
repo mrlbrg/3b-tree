@@ -14,7 +14,7 @@ namespace bbbtree {
 template <template <typename, typename, bool> typename IndexT, typename KeyT>
 	requires IndexInterface<IndexT, KeyT>
 Database<IndexT, KeyT>::Database(size_t page_size, size_t num_pages,
-								 uint16_t wa_threshold, bool reset)
+								 float wa_threshold, bool reset)
 	: buffer_manager(page_size, num_pages, reset),
 	  space_inventory(FSI_SEGMENT_ID, buffer_manager),
 	  records(SP_SEGMENT_ID, buffer_manager, space_inventory),

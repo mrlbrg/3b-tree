@@ -31,7 +31,7 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
   public:
 	/// Constructor.
 	DeltaTree(SegmentID segment_id, BufferManager &buffer_manager,
-			  uint16_t wa_threshold)
+			  float wa_threshold)
 		: PageLogic(),
 		  BTree<PID, Deltas<KeyT, ValueT>>(segment_id, buffer_manager, nullptr),
 		  wa_threshold(wa_threshold) {}
@@ -76,7 +76,7 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 	bool is_locked = false;
 	/// The write amplification threshold. When the ratio of bytes changed
 	/// in a node is below this threshold, we buffer the changes in this tree.
-	const uint16_t wa_threshold;
+	const float wa_threshold;
 	/// A queue of deletions to be processed after splitting a node.
 	std::vector<PID> deferred_deletions;
 };
@@ -89,7 +89,7 @@ class BBBTree {
   public:
 	/// Constructor. The Delta Tree is stored in `segment_id` + 1.
 	BBBTree(SegmentID segment_id, BufferManager &buffer_manager,
-			uint16_t wa_threshold)
+			float wa_threshold)
 		: delta_tree(segment_id + 1, buffer_manager, wa_threshold),
 		  btree(segment_id, buffer_manager, &delta_tree) {
 		stats.wa_threshold = wa_threshold;

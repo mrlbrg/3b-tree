@@ -17,7 +17,7 @@ template <typename KeyT, typename ValueT, bool UseDeltaTree = false> class Map {
 	Map() : map() {}
 	/// Constructor for compatibility with Database template.
 	Map(SegmentID /*segment_id*/, BufferManager & /*buffer_manager*/,
-		uint16_t /*wa_threshold*/) {}
+		float /*wa_threshold*/) {}
 
 	/// Lookup an entry in the tree. Returns `nullopt` if key was not
 	/// found.

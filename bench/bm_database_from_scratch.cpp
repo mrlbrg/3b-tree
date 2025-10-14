@@ -75,7 +75,7 @@ static void BM_DatabaseBTreeIndexFromScratch(benchmark::State &state) {
 
 	size_t num_tuples = state.range(0);
 	size_t num_pages = state.range(1);
-	uint16_t wa_threshold = state.range(2);
+	float wa_threshold = static_cast<float>(state.range(2)) / 100.0;
 	uint16_t page_size = state.range(3);
 
 	DatabaseUnderTest db{page_size, num_pages, wa_threshold, true};
@@ -98,7 +98,7 @@ static void BM_DatabaseBBBTreeIndexFromScratch(benchmark::State &state) {
 
 	size_t num_tuples = state.range(0);
 	size_t num_pages = state.range(1);
-	uint16_t wa_threshold = state.range(2);
+	float wa_threshold = static_cast<float>(state.range(2)) / 100.0;
 	uint16_t page_size = state.range(3);
 
 	DatabaseUnderTest db{page_size, num_pages, wa_threshold, true};

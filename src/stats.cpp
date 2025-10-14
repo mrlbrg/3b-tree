@@ -28,6 +28,7 @@ void Stats::clear() {
 	num_lookups_index = 0;
 	num_updates_index = 0;
 	num_deletions_db = 0;
+	max_bytes_changed = 0;
 }
 // -----------------------------------------------------------------
 std::unordered_map<std::string, size_t> Stats::get_stats() const {
@@ -50,7 +51,8 @@ std::unordered_map<std::string, size_t> Stats::get_stats() const {
 			{"pages_created", pages_created},
 			{"slotted_pages_created", slotted_pages_created},
 			{"pages_loaded", pages_loaded},
-			{"wa_threshold", wa_threshold},
+			{"wa_threshold", wa_threshold * 100},
+			{"max_bytes_changed", max_bytes_changed},
 			{"page_size", page_size},
 			{"num_pages", num_pages},
 			{"num_insertions_db", num_insertions_db},

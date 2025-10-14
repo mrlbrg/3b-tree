@@ -31,7 +31,7 @@ static void BM_PageViews_Insert_DB(benchmark::State &state) {
 
 	size_t num_pages = state.range(0);
 	uint16_t page_size = state.range(1);
-	uint16_t wa_threshold = state.range(2);
+	float wa_threshold = static_cast<float>(state.range(2)) / 100.0;
 
 	DatabaseUnderTest db{page_size, num_pages, wa_threshold, true};
 
@@ -56,8 +56,7 @@ static void BM_PageViews_Lookup_DB(benchmark::State &state) {
 
 	size_t num_pages = state.range(0);
 	uint16_t page_size = state.range(1);
-	uint16_t wa_threshold = state.range(2);
-
+	float wa_threshold = static_cast<float>(state.range(2)) / 100.0;
 	DatabaseUnderTest db{page_size, num_pages, wa_threshold, true};
 
 	// Propagate the database with pageview keys
@@ -87,7 +86,7 @@ template <typename DatabaseUnderTest>
 static void BM_PageViews_Mixed_DB(benchmark::State &state) {
 	size_t num_pages = state.range(0);
 	uint16_t page_size = state.range(1);
-	uint16_t wa_threshold = state.range(2);
+	float wa_threshold = static_cast<float>(state.range(2)) / 100.0;
 
 	DatabaseUnderTest db{page_size, num_pages, wa_threshold, true};
 
@@ -132,7 +131,7 @@ template <typename IndexUnderTest>
 static void BM_PageViews_Mixed_Index(benchmark::State &state) {
 	size_t num_pages = state.range(0);
 	uint16_t page_size = state.range(1);
-	uint16_t wa_threshold = state.range(2);
+	float wa_threshold = static_cast<float>(state.range(2)) / 100.0;
 
 	BufferManager buffer_manager{page_size, num_pages, true};
 	IndexUnderTest index{BENCH_SEGMENT_ID, buffer_manager, wa_threshold};
@@ -182,7 +181,7 @@ static void BM_PageViews_Insert_Index(benchmark::State &state) {
 
 	size_t num_pages = state.range(0);
 	uint16_t page_size = state.range(1);
-	uint16_t wa_threshold = state.range(2);
+	float wa_threshold = static_cast<float>(state.range(2)) / 100.0;
 
 	BufferManager buffer_manager{page_size, num_pages, true};
 	IndexUnderTest index{BENCH_SEGMENT_ID, buffer_manager, wa_threshold};
@@ -208,7 +207,7 @@ template <typename IndexUnderTest>
 static void BM_PageViews_Lookup_Index(benchmark::State &state) {
 	size_t num_pages = state.range(0);
 	uint16_t page_size = state.range(1);
-	uint16_t wa_threshold = state.range(2);
+	float wa_threshold = static_cast<float>(state.range(2)) / 100.0;
 
 	BufferManager buffer_manager{page_size, num_pages, true};
 	IndexUnderTest index{BENCH_SEGMENT_ID, buffer_manager, wa_threshold};
@@ -282,25 +281,35 @@ BENCHMARK_TEMPLATE(BM_PageViews_Mixed_DB, BBBTreeDB)
 	->Repetitions(1);
 // -----------------------------------------------------------------
 BENCHMARK_TEMPLATE(BM_PageViews_Mixed_Index, BTreeIndex)
-	->Args({50, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
-	->Args({100, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
-	->Args({200, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
-	->Args({300, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
-	->Args({400, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
-	->Args({500, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
-	->Args({600, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
-	->Args({700, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 0})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 1})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 5})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 10})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 20})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 30})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 40})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 50})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 60})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 70})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 80})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 90})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 100})
 	->Iterations(1)
 	->Repetitions(1);
 BENCHMARK_TEMPLATE(BM_PageViews_Mixed_Index, BBBTreeIndex)
-	->Args({50, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
-	->Args({100, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
-	->Args({200, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
-	->Args({300, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
-	->Args({400, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
-	->Args({500, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
-	->Args({600, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
-	->Args({700, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 0})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 1})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 5})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 10})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 20})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 30})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 40})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 50})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 60})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 70})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 80})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 90})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 100})
 	->Iterations(1)
 	->Repetitions(1);
 // -----------------------------------------------------------------

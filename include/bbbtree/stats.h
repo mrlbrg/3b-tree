@@ -47,7 +47,9 @@ struct Stats {
 	size_t delta_tree_height = 0;
 
 	// Threshold to trigger write-out of a dirty page.
-	size_t wa_threshold = 0;
+	float wa_threshold = 0;
+	// The maximum bytes changes we see.
+	size_t max_bytes_changed = 0;
 	// The pages' size in bytes.
 	size_t page_size = 0;
 	// The number of pages in the buffer pool.

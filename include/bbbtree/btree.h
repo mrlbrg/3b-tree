@@ -112,7 +112,7 @@ struct BTree : public Segment {
 	/// `wa_threshold` is not used in this tree, but required for an index
 	/// constructor.
 	BTree(SegmentID segment_id, BufferManager &buffer_manager,
-		  uint16_t /*wa_threshold*/)
+		  float /*wa_threshold*/)
 		: BTree(segment_id, buffer_manager, nullptr) {}
 
 	/// Destructor.
@@ -218,13 +218,18 @@ struct BTree : public Segment {
 			return reinterpret_cast<const std::byte *>(this);
 		}
 		// Get the update ratio on this node.
-		uint16_t get_update_ratio(uint32_t page_size) const {
-			if constexpr (UseDeltaTree) {
-				// TODO: Handle overflow of num_bytes_changed.
-				// assert(num_bytes_changed <= page_size);
-				return static_cast<uint32_t>(num_bytes_changed) * 100 /
-					   page_size;
+		float get_update_ratio(uint32_t page_size) const {
+			if constexpr (UseDeltaTree)
+			// TODO: Handle overflow of num_bytes_changed.
+			// assert(num_bytes_changed <= page_size);
+			{
+				stats.max_bytes_changed =
+					std::max(stats.max_bytes_changed,
+							 static_cast<size_t>(num_bytes_changed));
+				return static_cast<float>(num_bytes_changed) /
+					   static_cast<float>(page_size);
 			}
+
 			throw std::logic_error("Cannot get update ratio on a BTree that "
 								   "does not track deltas.");
 		}

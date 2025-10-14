@@ -72,7 +72,7 @@ void SetBenchmarkCounters(benchmark::State &state, const Stats &stats) {
 static void BM_BTreeIndexFromScratch(benchmark::State &state) {
 	size_t num_tuples = state.range(0);
 	size_t num_pages = state.range(1);
-	uint16_t wa_threshold = state.range(2);
+	float wa_threshold = static_cast<float>(state.range(2)) / 100.0;
 	uint16_t page_size = state.range(3);
 
 	BufferManager buffer_manager{page_size, num_pages, true};
@@ -98,7 +98,7 @@ static void BM_BTreeIndexFromScratch(benchmark::State &state) {
 static void BM_BBBTreeIndexFromScratch(benchmark::State &state) {
 	size_t num_tuples = state.range(0);
 	size_t num_pages = state.range(1);
-	uint16_t wa_threshold = state.range(2);
+	float wa_threshold = static_cast<float>(state.range(2)) / 100.0;
 	uint16_t page_size = state.range(3);
 
 	BufferManager buffer_manager{page_size, num_pages, true};
