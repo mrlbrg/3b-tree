@@ -14,11 +14,11 @@ benchmarks = data["benchmarks"]
 write_thresholds = [0, 1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 btree_benchmarks = [
-    f"BM_PageViews_Mixed_Index<BTreeIndex>/500/4096/{threshold}/iterations:1/repeats:1"
+    f"BM_PageViews_Insert_Index<BTreeIndex>/300/4096/{threshold}/iterations:1/repeats:1"
     for threshold in write_thresholds
 ]
 bbbtree_benchmarks = [
-    f"BM_PageViews_Mixed_Index<BBBTreeIndex>/500/4096/{threshold}/iterations:1/repeats:1"
+    f"BM_PageViews_Insert_Index<BBBTreeIndex>/300/4096/{threshold}/iterations:1/repeats:1"
     for threshold in write_thresholds
 ]
 
@@ -55,6 +55,7 @@ ax.set_xticks(list(range(0, 101, 10)))
 ax.set_xlabel("Write Threshold (%)", fontsize=14)
 ax.set_ylabel("% Fewer Pages Written", fontsize=14)
 ax.set_title("Write Amplification across Write Thresholds", fontsize=16)
+ax.set_ylim(top=100)
 ax.legend(fontsize=12)
 plt.tight_layout()
 plt.savefig(os.path.join(cwd, "plots", "pageviews_write_thresholds_improvement.png"))

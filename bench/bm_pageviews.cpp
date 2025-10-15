@@ -19,11 +19,18 @@ using BTreeIndex = BTree<KeyT, TID>;
 using BBBTreeIndex = BBBTree<KeyT, TID>;
 // -----------------------------------------------------------------
 static const constexpr size_t BENCH_PAGE_SIZE = 4096;
-static const constexpr size_t BENCH_NUM_PAGES = 500;
+static const constexpr size_t BENCH_NUM_PAGES = 300;
 static const constexpr size_t BENCH_WA_THRESHOLD = 5;
 static const constexpr SegmentID BENCH_SEGMENT_ID = 2;
+// The file with the distinct pageview keys.
 static const constexpr auto PAGES_FILE = "pageviews_en_sample_5.csv";
-static const constexpr auto OPERATIONS_FILE = "operations_en_sample_5.csv";
+// The file with the workload on the pageview keys.
+// filenames: `operations_en_sample_{sample_ratio}_{update_ratio}.csv`
+// `sample_ratio` is the fraction of all pageview rows from the original
+// dataset
+// `update_ratio` is the percentage of lookups that we turned into
+// updates
+static const constexpr auto OPERATIONS_FILE = "operations_en_sample_5_100.csv";
 // -----------------------------------------------------------------
 template <typename DatabaseUnderTest>
 static void BM_PageViews_Insert_DB(benchmark::State &state) {
@@ -150,6 +157,7 @@ static void BM_PageViews_Mixed_Index(benchmark::State &state) {
 	// Clear buffer manager to force write-backs.
 	buffer_manager.clear_all(true);
 	stats.clear();
+	logger.clear();
 
 	for (auto _ : state) {
 		for (const auto &op : ops) {
@@ -178,6 +186,7 @@ static void BM_PageViews_Mixed_Index(benchmark::State &state) {
 template <typename IndexUnderTest>
 static void BM_PageViews_Insert_Index(benchmark::State &state) {
 	stats.clear();
+	logger.clear();
 
 	size_t num_pages = state.range(0);
 	uint16_t page_size = state.range(1);
@@ -242,16 +251,6 @@ static void BM_PageViews_Lookup_Index(benchmark::State &state) {
 // 0: Number of pages in memory
 // 1: Page Size
 // 2: Write Amplification Threshold
-// -----------------------------------------------------------------
-void CustomArgs(benchmark::internal::Benchmark *b) {
-	for (int num_pages : {1, 2, 3}) {
-		for (int page_size : {10, 20}) {
-			for (int wa_threshold : {5, 10}) {
-				b->Args({num_pages, page_size, wa_threshold});
-			}
-		}
-	}
-}
 // -----------------------------------------------------------------
 BENCHMARK_TEMPLATE(BM_PageViews_Insert_DB, BTreeDB)
 	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})

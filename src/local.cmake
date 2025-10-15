@@ -36,3 +36,8 @@ add_library(bbbtree STATIC ${SRC_CC} ${INCLUDE_H})
 target_link_libraries(
     bbbtree 
 )
+
+# Pass project root as a macro to your benchmark code
+target_compile_definitions(bbbtree PUBLIC
+    PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+)

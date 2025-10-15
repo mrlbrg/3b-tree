@@ -26,9 +26,12 @@ DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
 	// New pages are always written out.
 	// Pages with many updates are always written out.
 	bool has_many_updates = node->get_update_ratio(page_size) > wa_threshold;
+
 	bool is_new = (state == State::NEW);
 	bool force_write_out = is_new || has_many_updates || is_locked;
-
+	// logger.log(std::to_string(wa_threshold * 100) + "," +
+	// 		   std::to_string(node->get_update_ratio(page_size) * 100) + "," +
+	// 		   std::to_string(page_id) + "," + (force_write_out ? "1" : "0"));
 	// Erase any buffered deltas for this page, since we are going to write it
 	// out now. If the tree is already locked, we cannot modify it now.
 	if (is_locked) {

@@ -1,8 +1,11 @@
 import json
 import matplotlib.pyplot as plt
+import os
 
-# Load benchmark results
-with open("/Users/marlenebargou/dev/3b-tree/plots/results.json") as f:
+cwd = os.getcwd()
+output_dir = os.path.join(cwd, "plots")
+
+with open(os.path.join(output_dir, "results.json")) as f:
     data = json.load(f)
 
 benchmarks = data["benchmarks"]
@@ -44,9 +47,8 @@ for num_tuples, group in grouped.items():
     plt.title(f"Pages Written per Benchmark (num_tuples={num_tuples})")
     plt.xticks(rotation=90)
     plt.tight_layout()
-    plt.savefig(
-        f"/Users/marlenebargou/dev/3b-tree/plots/benchmark_results_{num_tuples}.png"
-    )
+    output_file = os.path.join(output_dir, f"benchmark_results_{num_tuples}.png")
+    plt.savefig(output_file)
     plt.close()
 
     # Plot real_time
@@ -58,7 +60,8 @@ for num_tuples, group in grouped.items():
         plt.title(f"Real Time per Benchmark (num_tuples={num_tuples})")
         plt.xticks(rotation=90)
         plt.tight_layout()
-        plt.savefig(
-            f"/Users/marlenebargou/dev/3b-tree/plots/benchmark_results_realtime_{num_tuples}.png"
+        output_file = os.path.join(
+            output_dir, f"benchmark_results_realtime_{num_tuples}.png"
         )
+        plt.savefig(output_file)
         plt.close()
