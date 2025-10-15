@@ -953,9 +953,9 @@ void BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::update(const KeyT &key,
 
 	// Track delta.
 	if constexpr (UseDeltaTree) {
-		if (slot->state != OperationType::Inserted) {
-			slot->state = OperationType::Updated;
+		if (slot->state == OperationType::Unchanged) {
 			this->num_bytes_changed += value.size();
+			slot->state = OperationType::Updated;
 		}
 	}
 }
