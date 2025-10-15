@@ -2,6 +2,7 @@
 #include "bbbtree/btree.h"
 #include "bbbtree/buffer_manager.h"
 #include "bbbtree/database.h"
+#include "bbbtree/logger.h"
 #include "bbbtree/stats.h"
 #include "bbbtree/types.h"
 #include "helpers.h"
@@ -19,8 +20,10 @@ using BTreeIndex = BTree<KeyT, TID>;
 using BBBTreeIndex = BBBTree<KeyT, TID>;
 // -----------------------------------------------------------------
 static const constexpr size_t BENCH_PAGE_SIZE = 4096;
-static const constexpr size_t BENCH_NUM_PAGES = 300;
+static const constexpr size_t BENCH_NUM_PAGES = 500;
 static const constexpr size_t BENCH_WA_THRESHOLD = 5;
+static const constexpr size_t BENCH_UPDATE_THRESHOLD = 5;
+static const constexpr size_t BENCH_SAMPLE_SIZE = 5;
 static const constexpr SegmentID BENCH_SEGMENT_ID = 2;
 // The file with the distinct pageview keys.
 static const constexpr auto PAGES_FILE = "pageviews_en_sample_5.csv";
@@ -30,7 +33,14 @@ static const constexpr auto PAGES_FILE = "pageviews_en_sample_5.csv";
 // dataset
 // `update_ratio` is the percentage of lookups that we turned into
 // updates
-static const constexpr auto OPERATIONS_FILE = "operations_en_sample_5_100.csv";
+static const constexpr auto OPERATIONS_FILE = "operations_en_sample_5_5.csv";
+// -----------------------------------------------------------------
+/// Generate the operations filename based on the update ratio.
+std::string
+update_ratio_to_ops_filename(size_t update_ratio = BENCH_UPDATE_THRESHOLD) {
+	return "operations_en_sample_" + std::to_string(BENCH_SAMPLE_SIZE) + "_" +
+		   std::to_string(update_ratio) + ".csv";
+}
 // -----------------------------------------------------------------
 template <typename DatabaseUnderTest>
 static void BM_PageViews_Insert_DB(benchmark::State &state) {
@@ -139,6 +149,8 @@ static void BM_PageViews_Mixed_Index(benchmark::State &state) {
 	size_t num_pages = state.range(0);
 	uint16_t page_size = state.range(1);
 	float wa_threshold = static_cast<float>(state.range(2)) / 100.0;
+	size_t update_ratio = state.range(3);
+	auto ops_filename = update_ratio_to_ops_filename(update_ratio);
 
 	BufferManager buffer_manager{page_size, num_pages, true};
 	IndexUnderTest index{BENCH_SEGMENT_ID, buffer_manager, wa_threshold};
@@ -152,7 +164,7 @@ static void BM_PageViews_Mixed_Index(benchmark::State &state) {
 	}
 
 	// Get the workload
-	static std::vector<Operation> ops = LoadPageviewOps(OPERATIONS_FILE);
+	std::vector<Operation> ops = LoadPageviewOps(ops_filename);
 
 	// Clear buffer manager to force write-backs.
 	buffer_manager.clear_all(true);
@@ -280,35 +292,15 @@ BENCHMARK_TEMPLATE(BM_PageViews_Mixed_DB, BBBTreeDB)
 	->Repetitions(1);
 // -----------------------------------------------------------------
 BENCHMARK_TEMPLATE(BM_PageViews_Mixed_Index, BTreeIndex)
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 0})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 1})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 5})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 10})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 20})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 30})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 40})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 50})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 60})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 70})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 80})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 90})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 100})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD,
+			BENCH_UPDATE_THRESHOLD})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD, 0})
 	->Iterations(1)
 	->Repetitions(1);
 BENCHMARK_TEMPLATE(BM_PageViews_Mixed_Index, BBBTreeIndex)
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 0})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 1})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 5})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 10})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 20})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 30})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 40})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 50})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 60})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 70})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 80})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 90})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, 100})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD,
+			BENCH_UPDATE_THRESHOLD})
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD, 0})
 	->Iterations(1)
 	->Repetitions(1);
 // -----------------------------------------------------------------
