@@ -21,7 +21,7 @@ using BBBTreeIndex = BBBTree<KeyT, TID>;
 // -----------------------------------------------------------------
 static const constexpr size_t BENCH_PAGE_SIZE = 4096;
 static const constexpr size_t BENCH_NUM_PAGES = 500;
-static const constexpr size_t BENCH_WA_THRESHOLD = 5;
+static const constexpr size_t BENCH_WA_THRESHOLD = 0;
 static const constexpr size_t BENCH_UPDATE_THRESHOLD = 5;
 static const constexpr size_t BENCH_SAMPLE_SIZE = 5;
 static const constexpr SegmentID BENCH_SEGMENT_ID = 2;
@@ -198,7 +198,7 @@ static void BM_PageViews_Mixed_Index(benchmark::State &state) {
 template <typename IndexUnderTest>
 static void BM_PageViews_Insert_Index(benchmark::State &state) {
 	stats.clear();
-	logger.clear();
+	// logger.clear();
 
 	size_t num_pages = state.range(0);
 	uint16_t page_size = state.range(1);
@@ -305,13 +305,9 @@ BENCHMARK_TEMPLATE(BM_PageViews_Mixed_Index, BBBTreeIndex)
 	->Repetitions(1);
 // -----------------------------------------------------------------
 BENCHMARK_TEMPLATE(BM_PageViews_Insert_Index, BTreeIndex)
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
-	->Iterations(1)
-	->Repetitions(1);
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD});
 BENCHMARK_TEMPLATE(BM_PageViews_Insert_Index, BBBTreeIndex)
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
-	->Iterations(1)
-	->Repetitions(1);
+	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD});
 // -----------------------------------------------------------------
 BENCHMARK_TEMPLATE(BM_PageViews_Lookup_Index, BTreeIndex)
 	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})

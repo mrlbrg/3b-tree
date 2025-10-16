@@ -9,6 +9,7 @@
 #include <concepts>
 #include <cstring>
 #include <optional>
+#include <sys/types.h>
 #include <vector>
 
 // TODO: We currently do not persist the tree object while
@@ -74,13 +75,6 @@ enum class OperationType : uint8_t {
 	Deleted = 3 // A delete that is not on disk yet.
 };
 std::ostream &operator<<(std::ostream &os, const OperationType &type);
-// -----------------------------------------------------------------
-/// If we track deltas, we need to store additional state in the Slot.
-/// Template specializations must be at namespace scope, so we put it here.
-/// TODO: Adding 1B for state brings the size of the slot to 12B. This affects
-/// fanout. Try something better.
-template <bool TrackDeltas> struct SlotBase {};
-template <> struct SlotBase<true> {};
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 struct BTree;
@@ -190,27 +184,7 @@ struct BTree : public Segment {
 		bool operator==(const Node &other) const { return this == &other; }
 
 		/// A slot in a node. Contains position and size of the key.
-		struct Slot : public SlotBase<UseDeltaTree> {
-			/// Default Constructor.
-			Slot() = delete;
-			/// Constructor.
-			Slot(uint32_t offset, uint16_t key_size)
-				: offset(offset), key_size(key_size) {}
-
-			/// Returns the key stored in this slot. `KeyT` is only a shallow
-			/// copy from the node. Manage lifetime carefully.
-			const KeyT get_key(const std::byte *begin) const;
-
-			/// The offset within the page.
-			uint32_t offset;
-			/// The number of bytes from offset to end of key.
-			uint16_t key_size;
-			/// A conditional state for a BTree that needs to track deltas.
-			/// `no_unique_address` ensures that this does not increase the size
-			/// of a slot without this member.
-			[[no_unique_address]] std::conditional_t<
-				UseDeltaTree, OperationType, EmptyStruct> state;
-		};
+		struct Slot {};
 		/// Get data.
 		std::byte *get_data() { return reinterpret_cast<std::byte *>(this); }
 		/// Get constant data.
@@ -290,20 +264,55 @@ struct BTree : public Segment {
 
 		/// Indicates the position and length of the key within the page.
 		/// Contains the key's corresponding child (PageID).
-		struct Pivot final : public Node::Slot {
+		struct Pivot {
+			struct EmptyStruct {};
+
+			/// Default Constructor.
+			Pivot() = delete;
+			/// Constructor.
+			Pivot(uint32_t offset, uint16_t key_size)
+				: state_and_offset(offset), key_size(key_size) {}
 			/// Constructor.
 			Pivot(std::byte *page_begin, uint32_t offset, const KeyT &key,
 				  PageID child);
 
+			/// Returns the key stored in this slot. `KeyT` is only a shallow
+			/// copy from the node. Manage lifetime carefully.
+			const KeyT get_key(const std::byte *begin) const;
+
+			/// Returns the value stored in this slot.
 			PageID get_value(const std::byte * /*begin*/) const {
 				return child;
+			}
+			/// Print the slot to std output.
+			void print(std::ostream &os, const std::byte *begin) const;
+
+			/// Returns the offset.
+			inline uint32_t get_offset() const {
+				return state_and_offset.get_offset();
+			}
+			/// Set the offset.
+			inline void set_offset(uint32_t offset) {
+				state_and_offset.set_offset(offset);
+			}
+			/// Set the state.
+			inline void set_state(OperationType state) {
+				assert(UseDeltaTree);
+				state_and_offset.set_state(static_cast<uint8_t>(state));
+			}
+			/// Get the state.
+			inline OperationType get_state() const {
+				assert(UseDeltaTree);
+				return static_cast<OperationType>(state_and_offset.get_state());
 			}
 
 			/// The child of this pivot.
 			PageID child;
-
-			/// Print the slot to std output.
-			void print(std::ostream &os, const std::byte *begin) const;
+			/// The upper 2 bits represent the state for delta tracking. The
+			/// lower 30 bits represent the offset.
+			Value2And30 state_and_offset;
+			/// The number of bytes from offset to end of key.
+			uint16_t key_size;
 		};
 		/// Right-most child. Pivot for all keys bigger than the biggest pivot.
 		/// Must be set during node splitting. Zero is invalid.
@@ -360,7 +369,18 @@ struct BTree : public Segment {
 	struct LeafNode final : public Node {
 		/// Indicates the position and length of the key/value pair within the
 		/// node.
-		struct LeafSlot final : public Node::Slot {
+		struct LeafSlot {
+			struct EmptyStruct {};
+			/// Default Constructor.
+			LeafSlot() = delete;
+			/// Constructor.
+			LeafSlot(uint32_t offset, uint16_t key_size)
+				: state_and_offset(offset), key_size(key_size) {}
+
+			/// Returns the key stored in this slot. `KeyT` is only a shallow
+			/// copy from the node. Manage lifetime carefully.
+			const KeyT get_key(const std::byte *begin) const;
+
 			/// Constructor.
 			LeafSlot(std::byte *page_begin, uint32_t offset, const KeyT &key,
 					 const ValueT &value);
@@ -369,8 +389,33 @@ struct BTree : public Segment {
 			/// to.
 			const ValueT get_value(const std::byte *begin) const;
 
+			/// Print the slot.
 			void print(std::ostream &os, const std::byte *begin) const;
 
+			/// Returns the offset.
+			inline uint32_t get_offset() const {
+				return state_and_offset.get_offset();
+			}
+			/// Set the offset.
+			inline void set_offset(uint32_t offset) {
+				state_and_offset.set_offset(offset);
+			}
+			/// Set the state.
+			inline void set_state(OperationType state) {
+				assert(UseDeltaTree);
+				state_and_offset.set_state(static_cast<uint8_t>(state));
+			}
+			/// Get the state.
+			inline OperationType get_state() const {
+				assert(UseDeltaTree);
+				return static_cast<OperationType>(state_and_offset.get_state());
+			}
+
+			/// The upper 2 bits represent the state for delta tracking.
+			/// The lower 30 bits represent the offset.
+			Value2And30 state_and_offset;
+			/// The number of bytes from offset to end of key.
+			uint16_t key_size;
 			/// The number of bytes from end of key to end of entry.
 			uint16_t value_size;
 		};
@@ -384,22 +429,22 @@ struct BTree : public Segment {
 		size_t required_space(const KeyT &key, const ValueT &value) const {
 			return (key.size() + value.size() + sizeof(LeafSlot));
 		}
-		/// Returns true if this leaf has enough space for the given key/value
-		/// pair.
+		/// Returns true if this leaf has enough space for the given
+		/// key/value pair.
 		bool has_space(const KeyT &key, const ValueT &value) const {
 			return get_free_space() >= required_space(key, value);
 		}
 
-		/// Get the index of the first key that is not less than than a provided
-		/// key. TODO: Some `ValueT` like `String` only return a view onto the
-		/// node. This can become a dangling reference if the node is released.
-		/// Use with care and copy the value if necessary e.g. when
-		/// multithreading.
+		/// Get the index of the first key that is not less than than a
+		/// provided key. TODO: Some `ValueT` like `String` only return a
+		/// view onto the node. This can become a dangling reference if the
+		/// node is released. Use with care and copy the value if necessary
+		/// e.g. when multithreading.
 		std::optional<ValueT> lookup(const KeyT &key);
 
-		/// Inserts a key, value pair into this leaf. Returns true if key was
-		/// actually inserted. Returns false if key already exists. Caller must
-		/// ensure that there is enough space.
+		/// Inserts a key, value pair into this leaf. Returns true if key
+		/// was actually inserted. Returns false if key already exists.
+		/// Caller must ensure that there is enough space.
 		[[nodiscard]] bool insert(const KeyT &key, const ValueT &value,
 								  bool allow_duplicates = false);
 
@@ -410,17 +455,17 @@ struct BTree : public Segment {
 		/// key was found and removed. Otherwise false.
 		bool erase(const KeyT &key, size_t page_size);
 
-		/// Splits the leaf and returns the resulting pivotal key to be inserted
-		/// into the parent. `this` leaf is guaranteed to be the left node and
-		/// `new_node` the right node after splitting.
+		/// Splits the leaf and returns the resulting pivotal key to be
+		/// inserted into the parent. `this` leaf is guaranteed to be the
+		/// left node and `new_node` the right node after splitting.
 		[[nodiscard]] const KeyT split(LeafNode &new_node, const KeyT &key,
 									   size_t page_size);
 
 		/// Print leaf to standard output.
 		void print(std::ostream &os);
 
-		/// Get free space in bytes. Equals the space between the header + slots
-		/// and data section.
+		/// Get free space in bytes. Equals the space between the header +
+		/// slots and data section.
 		size_t get_free_space() const {
 			assert(this->data_start >=
 				   (sizeof(LeafNode) + this->slot_count * sizeof(LeafSlot)));
@@ -460,14 +505,14 @@ struct BTree : public Segment {
 	};
 
 	/// The page of the current root.
-	/// Important TODO: When multithreading, whenever someone tries to acquire a
-	/// lock on this page, make sure after acquisition that this page is still
-	/// the root.
+	/// Important TODO: When multithreading, whenever someone tries to
+	/// acquire a lock on this page, make sure after acquisition that this
+	/// page is still the root.
 	PageID root;
 	/// The next free, unique page ID.
 	PageID next_free_page;
-	/// The page logic specific to this tree. Called back by the buffer manager
-	/// when loading/unloading pages.
+	/// The page logic specific to this tree. Called back by the buffer
+	/// manager when loading/unloading pages.
 	PageLogic *page_logic;
 
 	/// Returns the appropriate leaf page for a given key.
@@ -475,8 +520,8 @@ struct BTree : public Segment {
 	BufferFrame &get_leaf(const KeyT &key, bool exclusive);
 
 	/// Traverses tree for given key and splits corresponding leaf.
-	/// Only splits if leaf is full. Another thread might have triggered split
-	/// already. Holds all locks on the path for cascading splits.
+	/// Only splits if leaf is full. Another thread might have triggered
+	/// split already. Holds all locks on the path for cascading splits.
 	void split(const KeyT &key, const ValueT &value);
 
 	/// Returns the next free page ID.

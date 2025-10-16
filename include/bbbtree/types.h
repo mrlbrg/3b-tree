@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <stdexcept>
 
 namespace bbbtree {
 // -----------------------------------------------------------------
@@ -116,6 +117,45 @@ struct String {
 
   private:
 	std::string_view view;
+};
+// -----------------------------------------------------------------
+class Value2And30 {
+  private:
+	uint32_t value; // 32-bit container
+
+	static constexpr uint32_t OFFSET_MASK = 0x3FFFFFFF; // Lower 30 bits
+	static constexpr uint32_t STATE_MASK = 0xC0000000; // Upper 2 bits (1100...)
+
+  public:
+	// Default constructor
+	Value2And30(uint32_t offset = 0, uint8_t state = 0) {
+		set_offset(offset);
+		set_state(state);
+	}
+
+	// Get the 30-bit offset
+	uint32_t get_offset() const { return value & OFFSET_MASK; }
+
+	// Set the 30-bit offset
+	void set_offset(uint32_t offset) {
+		if (offset > OFFSET_MASK)
+			throw std::out_of_range("Offset must fit in 30 bits");
+		// Preserve state bits
+		value = (value & STATE_MASK) | (offset & OFFSET_MASK);
+	}
+
+	// Get the 2-bit state
+	uint8_t get_state() const {
+		return static_cast<uint8_t>((value >> 30) & 0x03);
+	}
+
+	// Set the 2-bit state
+	void set_state(uint8_t state) {
+		if (state > 3)
+			throw std::out_of_range("State must fit in 2 bits");
+		// Preserve offset bits
+		value = (value & OFFSET_MASK) | (static_cast<uint32_t>(state) << 30);
+	}
 };
 // -----------------------------------------------------------------
 } // namespace bbbtree

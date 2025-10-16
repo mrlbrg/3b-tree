@@ -18,12 +18,12 @@ class Logger {
 
   public:
 	void log(const std::string &message) {
-#ifndef NDEBUG
+		// #ifndef NDEBUG
 		assert(out.is_open());
 		out << level << message << std::endl;
-#else
-		throw std::runtime_error("Not in debug mode");
-#endif
+		// #else
+		// throw std::runtime_error("Not in debug mode");
+		// #endif
 	}
 
 	~Logger() { out.close(); }

@@ -112,7 +112,7 @@ template <typename NodeT>
 void DeltaTree<KeyT, ValueT>::clean_node(NodeT *node) {
 	node->num_bytes_changed = 0;
 	for (auto *slot = node->slots_begin(); slot < node->slots_end(); ++slot)
-		slot->state = OperationType::Unchanged;
+		slot->set_state(OperationType::Unchanged);
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
@@ -129,15 +129,17 @@ void DeltaTree<KeyT, ValueT>::extract_deltas(const NodeT *node,
 											 DeltasT &deltas) {
 	for (const auto *slot = node->slots_begin(); slot < node->slots_end();
 		 ++slot) {
-		switch (slot->state) {
+		switch (slot->get_state()) {
 		case OperationType::Unchanged:
 			continue;
 		case OperationType::Inserted:
-			deltas.emplace_back(slot->state, slot->get_key(node->get_data()),
+			deltas.emplace_back(slot->get_state(),
+								slot->get_key(node->get_data()),
 								slot->get_value(node->get_data()));
 			break;
 		case OperationType::Updated:
-			deltas.emplace_back(slot->state, slot->get_key(node->get_data()),
+			deltas.emplace_back(slot->get_state(),
+								slot->get_key(node->get_data()),
 								slot->get_value(node->get_data()));
 			break;
 		default:
