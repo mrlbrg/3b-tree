@@ -14,6 +14,7 @@ set(
     include/bbbtree/slotted_page.h
     include/bbbtree/btree.h
     include/bbbtree/bbbtree.h
+    include/bbbtree/btree_with_tracking.h
     include/bbbtree/delta.h
     include/bbbtree/map.h
     include/bbbtree/file.h 

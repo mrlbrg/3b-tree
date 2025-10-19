@@ -14,6 +14,7 @@ set(
     src/slotted_page.cpp
     src/btree.cpp
     src/bbbtree.cpp
+    src/btree_with_tracking.cpp
     src/delta.cpp
     src/map.cpp
     src/stats.cpp

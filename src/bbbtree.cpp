@@ -10,9 +10,8 @@
 namespace bbbtree {
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>
-std::pair<bool, bool>
-DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
-									   PageID page_id, size_t page_size) {
+bool DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
+											PageID page_id, size_t page_size) {
 #ifndef NDEBUG
 	logger.log("DeltaTree::before_unload(): page " + std::to_string(page_id) +
 			   " state " +
@@ -28,10 +27,12 @@ DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
 	bool has_many_updates = node->get_update_ratio(page_size) > wa_threshold;
 
 	bool is_new = (state == State::NEW);
-	bool force_write_out = is_new || has_many_updates || is_locked;
+	bool force_write_out =
+		!this->buffering_enabled || is_new || has_many_updates || is_locked;
 	// logger.log(std::to_string(wa_threshold * 100) + "," +
 	// 		   std::to_string(node->get_update_ratio(page_size) * 100) + "," +
 	// 		   std::to_string(page_id) + "," + (force_write_out ? "1" : "0"));
+
 	// Erase any buffered deltas for this page, since we are going to write it
 	// out now. If the tree is already locked, we cannot modify it now.
 	if (is_locked) {
@@ -46,7 +47,7 @@ DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
 	// it out now.
 	if (force_write_out) {
 		clean_node(reinterpret_cast<Node *>(data));
-		return {true, true};
+		return true;
 	}
 
 	is_locked = true;
@@ -66,8 +67,7 @@ DeltaTree<KeyT, ValueT>::before_unload(char *data, const State &state,
 
 	is_locked = false;
 
-	++stats.pages_write_deferred;
-	return {true, false};
+	return false;
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>

@@ -78,7 +78,8 @@ static void BM_DatabaseWithBTreeIndex(benchmark::State &state) {
 	state.counters["bytes_written_physically"] = stats.bytes_written_physically;
 	state.counters["pages_evicted"] = stats.pages_evicted;
 	state.counters["pages_written"] = stats.pages_written;
-	state.counters["pages_write_deferred"] = stats.pages_write_deferred;
+	state.counters["btree_pages_write_deferred"] =
+		stats.btree_pages_write_deferred;
 }
 // -----------------------------------------------------------------
 static void BM_DatabaseWithBBBTreeIndex(benchmark::State &state) {
@@ -110,7 +111,8 @@ static void BM_DatabaseWithBBBTreeIndex(benchmark::State &state) {
 	state.counters["bytes_written_physically"] = stats.bytes_written_physically;
 	state.counters["pages_evicted"] = stats.pages_evicted;
 	state.counters["pages_written"] = stats.pages_written;
-	state.counters["pages_write_deferred"] = stats.pages_write_deferred;
+	state.counters["btree_pages_write_deferred"] =
+		stats.btree_pages_write_deferred;
 }
 // -----------------------------------------------------------------
 } // namespace

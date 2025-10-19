@@ -41,12 +41,10 @@ class BBBTreeTest : public ::testing::Test {};
 // A dummy page logic that is used to test the callbacks of the buffer manager.
 template <bool ContinueUnload> class TestPageLogic : public PageLogic {
   public:
-	std::pair<bool, bool> before_unload(char * /*data*/,
-										const State & /*state*/,
-										PageID /*page_id*/,
-										size_t /*page_size*/) override {
+	bool before_unload(char * /*data*/, const State & /*state*/,
+					   PageID /*page_id*/, size_t /*page_size*/) override {
 		unload_called = true;
-		return {true, ContinueUnload};
+		return ContinueUnload;
 	}
 	void after_load(char * /*data*/, PageID /*page_id*/) override {
 		load_called = true;
@@ -66,8 +64,8 @@ TEST_F(BBBTreeTest, BufferManagerCallsBack) {
 
 	// Create a new page. Does not call load.
 	{
-		auto &frame =
-			buffer_manager.fix_page(segment_id, page_id, true, &page_logic);
+		auto &frame = buffer_manager.fix_page(segment_id, page_id, true,
+											  &page_logic, false);
 		buffer_manager.unfix_page(frame, true);
 		EXPECT_FALSE(page_logic.load_called);
 		EXPECT_FALSE(page_logic.unload_called);
@@ -82,8 +80,8 @@ TEST_F(BBBTreeTest, BufferManagerCallsBack) {
 
 	// Load page again. Calls load.
 	{
-		auto &frame =
-			buffer_manager.fix_page(segment_id, page_id, true, &page_logic);
+		auto &frame = buffer_manager.fix_page(segment_id, page_id, true,
+											  &page_logic, false);
 		buffer_manager.unfix_page(frame, true);
 		EXPECT_TRUE(page_logic.unload_called);
 		EXPECT_TRUE(page_logic.load_called);
@@ -104,7 +102,7 @@ TEST_F(BBBTreeTest, BufferManagerContinuesUnload) {
 	{
 		// Write some initial data to page and write it out.
 		auto &frame =
-			buffer_manager.fix_page(segment_id, page_id, true, nullptr);
+			buffer_manager.fix_page(segment_id, page_id, true, nullptr, false);
 		std::memcpy(frame.get_data(), initial_data.data(), TEST_PAGE_SIZE);
 		EXPECT_EQ(std::string_view(frame.get_data(), TEST_PAGE_SIZE),
 				  std::string_view(initial_data.data(), initial_data.size()));
@@ -114,7 +112,7 @@ TEST_F(BBBTreeTest, BufferManagerContinuesUnload) {
 	{
 		// Test that initial data is still there.
 		auto &frame =
-			buffer_manager.fix_page(segment_id, page_id, true, nullptr);
+			buffer_manager.fix_page(segment_id, page_id, true, nullptr, false);
 		EXPECT_EQ(std::string_view(frame.get_data(), TEST_PAGE_SIZE),
 				  std::string_view(initial_data.data(), initial_data.size()));
 		buffer_manager.unfix_page(frame, false);
@@ -123,7 +121,7 @@ TEST_F(BBBTreeTest, BufferManagerContinuesUnload) {
 	// Write some data to page and write it out.
 	{
 		auto &frame = buffer_manager.fix_page(segment_id, page_id, true,
-											  &persisting_page_logic);
+											  &persisting_page_logic, false);
 		EXPECT_NE(std::string_view(frame.get_data(), TEST_PAGE_SIZE),
 				  std::string_view(data.data(), data.size()));
 		std::memcpy(frame.get_data(), data.data(), TEST_PAGE_SIZE);
@@ -136,7 +134,7 @@ TEST_F(BBBTreeTest, BufferManagerContinuesUnload) {
 	// Test that the data is persisted.
 	{
 		auto &frame = buffer_manager.fix_page(segment_id, page_id, true,
-											  &persisting_page_logic);
+											  &persisting_page_logic, false);
 		EXPECT_EQ(std::string_view(frame.get_data(), TEST_PAGE_SIZE),
 				  std::string_view(data.data(), data.size()));
 		buffer_manager.unfix_page(frame, true);
@@ -157,7 +155,7 @@ TEST_F(BBBTreeTest, BufferManagerStopsUnload) {
 	{
 		// Write some initial data to page and write it out.
 		auto &frame =
-			buffer_manager.fix_page(segment_id, page_id, true, nullptr);
+			buffer_manager.fix_page(segment_id, page_id, true, nullptr, false);
 		std::memcpy(frame.get_data(), initial_data.data(), TEST_PAGE_SIZE);
 		EXPECT_EQ(std::string_view(frame.get_data(), TEST_PAGE_SIZE),
 				  std::string_view(initial_data.data(), initial_data.size()));
@@ -167,7 +165,7 @@ TEST_F(BBBTreeTest, BufferManagerStopsUnload) {
 	{
 		// Test that initial data is still there.
 		auto &frame =
-			buffer_manager.fix_page(segment_id, page_id, true, nullptr);
+			buffer_manager.fix_page(segment_id, page_id, true, nullptr, false);
 		EXPECT_EQ(std::string_view(frame.get_data(), TEST_PAGE_SIZE),
 				  std::string_view(initial_data.data(), initial_data.size()));
 		buffer_manager.unfix_page(frame, false);
@@ -176,8 +174,8 @@ TEST_F(BBBTreeTest, BufferManagerStopsUnload) {
 	{
 		// Write some new data to page and write it out. Should not be persisted
 		// due to page logic.
-		auto &frame = buffer_manager.fix_page(segment_id, page_id, true,
-											  &non_persisting_page_logic);
+		auto &frame = buffer_manager.fix_page(
+			segment_id, page_id, true, &non_persisting_page_logic, false);
 		EXPECT_NE(std::string_view(frame.get_data(), TEST_PAGE_SIZE),
 				  std::string_view(data.data(), data.size()));
 		std::memcpy(frame.get_data(), data.data(), TEST_PAGE_SIZE);
@@ -189,8 +187,8 @@ TEST_F(BBBTreeTest, BufferManagerStopsUnload) {
 
 	{
 		// Test that the data is not persisted.
-		auto &frame = buffer_manager.fix_page(segment_id, page_id, true,
-											  &non_persisting_page_logic);
+		auto &frame = buffer_manager.fix_page(
+			segment_id, page_id, true, &non_persisting_page_logic, false);
 		EXPECT_NE(std::string_view(frame.get_data(), TEST_PAGE_SIZE),
 				  std::string_view(data.data(), data.size()));
 		buffer_manager.unfix_page(frame, false);
@@ -312,8 +310,8 @@ TEST_F(BBBTreeTest, LeafSplitsInDeltaTree) {
 	// Check nodes' state on disk.
 	{
 		TestPageLogic<false> non_applying_page_logic;
-		auto &frame1 = buffer_manager->fix_page(TEST_SEGMENT_ID, 1, true,
-												&non_applying_page_logic);
+		auto &frame1 = buffer_manager->fix_page(
+			TEST_SEGMENT_ID, 1, true, &non_applying_page_logic, false);
 		auto *node1 = reinterpret_cast<BTreeInt::LeafNode *>(frame1.get_data());
 		// Node 1 does not have its node split on disk. So all keys are still
 		// present.
@@ -324,8 +322,8 @@ TEST_F(BBBTreeTest, LeafSplitsInDeltaTree) {
 		}
 		buffer_manager->unfix_page(frame1, false);
 
-		auto &frame2 = buffer_manager->fix_page(TEST_SEGMENT_ID, 2, true,
-												&non_applying_page_logic);
+		auto &frame2 = buffer_manager->fix_page(
+			TEST_SEGMENT_ID, 2, true, &non_applying_page_logic, false);
 		auto *node2 = reinterpret_cast<BTreeInt::LeafNode *>(frame2.get_data());
 		// Node 2 was created newly so all its inserted keys are also on disk.
 		EXPECT_FALSE(node2->lookup(UInt64{1}).has_value());
@@ -392,8 +390,8 @@ TEST_F(BBBTreeTest, SplitAndInserts) {
 
 	// Check node state in memory: Inserted value and split exist in memory.
 	{
-		auto &frame1 = buffer_manager->fix_page(TEST_SEGMENT_ID, 1, true,
-												bbbtree_int->get_delta_tree());
+		auto &frame1 = buffer_manager->fix_page(
+			TEST_SEGMENT_ID, 1, true, bbbtree_int->get_delta_tree(), false);
 		auto *node1 = reinterpret_cast<BTreeInt::LeafNode *>(frame1.get_data());
 		EXPECT_TRUE(node1->slot_count == 3);
 		EXPECT_TRUE(node1->lookup(UInt64{0}).has_value());
@@ -408,8 +406,8 @@ TEST_F(BBBTreeTest, SplitAndInserts) {
 	// disk.
 	{
 		TestPageLogic<false> non_applying_page_logic;
-		auto &frame1 = buffer_manager->fix_page(TEST_SEGMENT_ID, 1, true,
-												&non_applying_page_logic);
+		auto &frame1 = buffer_manager->fix_page(
+			TEST_SEGMENT_ID, 1, true, &non_applying_page_logic, false);
 		auto *node1 = reinterpret_cast<BTreeInt::LeafNode *>(frame1.get_data());
 		// Node 1 does not have its node split on disk. So all keys are still
 		// present.
@@ -474,7 +472,7 @@ TEST_F(BBBTreeTest, InnerNodeInsert) {
 	{
 		TestPageLogic<false> non_applying_page_logic;
 		auto &frame = buffer_manager->fix_page(TEST_SEGMENT_ID, 3, true,
-											   &non_applying_page_logic);
+											   &non_applying_page_logic, false);
 		auto *node = reinterpret_cast<BTreeInt::InnerNode *>(frame.get_data());
 
 		EXPECT_EQ(node->slot_count, 1);
@@ -538,7 +536,7 @@ TEST_F(BBBTreeTest, InnerNodeUpdate) {
 	{
 		TestPageLogic<false> non_applying_page_logic;
 		auto &frame = buffer_manager->fix_page(TEST_SEGMENT_ID, 3, true,
-											   &non_applying_page_logic);
+											   &non_applying_page_logic, false);
 		auto *node = reinterpret_cast<BTreeInt::InnerNode *>(frame.get_data());
 
 		EXPECT_EQ(node->upper, PageID(2));
@@ -600,8 +598,8 @@ TEST_F(BBBTreeTest, UpdatingDeltaTreeEntries) {
 
 	// Check node state in memory: Inserted value and split exist in memory.
 	{
-		auto &frame1 = buffer_manager->fix_page(TEST_SEGMENT_ID, 1, true,
-												bbbtree_int->get_delta_tree());
+		auto &frame1 = buffer_manager->fix_page(
+			TEST_SEGMENT_ID, 1, true, bbbtree_int->get_delta_tree(), false);
 		EXPECT_TRUE(frame1.is_clean());
 		auto *node1 = reinterpret_cast<BTreeInt::LeafNode *>(frame1.get_data());
 		EXPECT_EQ(node1->slot_count, 3);
@@ -617,8 +615,8 @@ TEST_F(BBBTreeTest, UpdatingDeltaTreeEntries) {
 	// disk.
 	{
 		TestPageLogic<false> non_applying_page_logic;
-		auto &frame1 = buffer_manager->fix_page(TEST_SEGMENT_ID, 1, true,
-												&non_applying_page_logic);
+		auto &frame1 = buffer_manager->fix_page(
+			TEST_SEGMENT_ID, 1, true, &non_applying_page_logic, false);
 		auto *node1 = reinterpret_cast<BTreeInt::LeafNode *>(frame1.get_data());
 		// Node 1 does not have the last two entries.
 		EXPECT_TRUE(node1->slot_count == 1);

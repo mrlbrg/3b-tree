@@ -32,9 +32,33 @@ struct Stats {
 	size_t pages_evicted = 0;
 	// Counts every time a page is written to disk.
 	size_t pages_written = 0;
+
+	// Count the number of times a delta page is created.
+	size_t delta_pages_created = 0;
+	// Count the number of times a B-Tree page is created.
+	size_t btree_pages_created = 0;
+	// Count the number of times a delta page is loaded from disk.
+	size_t delta_pages_missed = 0;
+	// Count the number of times a B-Tree page is loaded from disk.
+	size_t btree_pages_missed = 0;
+	// Count the number of times a delta page is found in the buffer.
+	size_t delta_pages_hit = 0;
+	// Count the number of times a B-Tree page is found in the buffer.
+	size_t btree_pages_hit = 0;
+	// Count the number of times a delta page is evicted from the buffer.
+	// This includes both dirty and clean evictions.
+	size_t delta_pages_evicted = 0;
+	// Count the number of times a B-Tree page is evicted from the buffer.
+	// This includes both dirty and clean evictions.
+	size_t btree_pages_evicted = 0;
+	// Count the number of times a delta page is written to disk.
+	size_t delta_pages_written = 0;
+	// Count the number of times a B-Tree page is written to disk instead of
+	// being buffered.
+	size_t btree_pages_written = 0;
 	// Counts the number of times a page's changed were extracted and buffered
 	// in-memory instead of written to disk.
-	size_t pages_write_deferred = 0;
+	size_t btree_pages_write_deferred = 0;
 
 	// Counts the number of buffer hits.
 	size_t buffer_hits = 0;

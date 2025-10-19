@@ -39,7 +39,7 @@ row_groups = [
         "slotted_pages_created",
         "pages_evicted",
         "pages_loaded",
-        "pages_write_deferred",
+        "btree_pages_write_deferred",
         "pages_written",
         "total_page_io",
     ],
@@ -73,7 +73,7 @@ pretty = {
     "slotted_pages_created": "Num. Slotted Pages Created",
     "pages_evicted": "Num. Pages Evicted",
     "pages_loaded": "Num. Pages Loaded",
-    "pages_write_deferred": "Num. Pages Write Deferred",
+    "btree_pages_write_deferred": "Num. Pages Write Deferred",
     "pages_written": "Num. Pages Written",
     "total_page_io": "Total Page I/O",
 }

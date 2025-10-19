@@ -12,7 +12,7 @@ void Stats::clear() {
 	bytes_written_physically = 0;
 	pages_evicted = 0;
 	pages_written = 0;
-	pages_write_deferred = 0;
+	btree_pages_write_deferred = 0;
 	b_tree_height = 0;
 	delta_tree_height = 0;
 	pages_created = 0;
@@ -29,6 +29,16 @@ void Stats::clear() {
 	num_updates_index = 0;
 	num_deletions_db = 0;
 	max_bytes_changed = 0;
+	delta_pages_created = 0;
+	btree_pages_created = 0;
+	delta_pages_missed = 0;
+	btree_pages_missed = 0;
+	delta_pages_hit = 0;
+	btree_pages_hit = 0;
+	delta_pages_evicted = 0;
+	btree_pages_evicted = 0;
+	delta_pages_written = 0;
+	btree_pages_written = 0;
 }
 // -----------------------------------------------------------------
 std::unordered_map<std::string, size_t> Stats::get_stats() const {
@@ -45,7 +55,7 @@ std::unordered_map<std::string, size_t> Stats::get_stats() const {
 			{"pages_evicted", pages_evicted},
 			{"pages_written", pages_written},
 			{"total_page_io", pages_written + pages_loaded},
-			{"pages_write_deferred", pages_write_deferred},
+			{"btree_pages_write_deferred", btree_pages_write_deferred},
 			{"b_tree_height", b_tree_height},
 			{"delta_tree_height", delta_tree_height},
 			{"pages_created", pages_created},
@@ -67,7 +77,17 @@ std::unordered_map<std::string, size_t> Stats::get_stats() const {
 			{"num_lookups_db", num_lookups_db},
 			{"num_lookups_index", num_lookups_index},
 			{"num_updates_index", num_updates_index},
-			{"num_deletions_db", num_deletions_db}};
+			{"num_deletions_db", num_deletions_db},
+			{"delta_pages_created", delta_pages_created},
+			{"btree_pages_created", btree_pages_created},
+			{"delta_pages_missed", delta_pages_missed},
+			{"btree_pages_missed", btree_pages_missed},
+			{"delta_pages_hit", delta_pages_hit},
+			{"btree_pages_hit", btree_pages_hit},
+			{"delta_pages_evicted", delta_pages_evicted},
+			{"btree_pages_evicted", btree_pages_evicted},
+			{"delta_pages_written", delta_pages_written},
+			{"btree_pages_written", btree_pages_written}};
 }
 // -----------------------------------------------------------------
 std::ostream &operator<<(std::ostream &os, const Stats &stats) {

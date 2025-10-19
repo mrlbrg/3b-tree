@@ -29,9 +29,8 @@ class PageLogic {
 	/// The function to call before a dirty page is unloaded.
 	/// Is not called when the page is new.
 	/// Returns true when the unload should proceed to disk.
-	virtual std::pair<bool, bool> before_unload(char *data, const State &state,
-												PageID page_id,
-												size_t page_size) = 0;
+	virtual bool before_unload(char *data, const State &state, PageID page_id,
+							   size_t page_size) = 0;
 	/// The function to call after the page was loaded from disk.
 	virtual void after_load(char *data, PageID page_id) = 0;
 	/// Virtual destructor.
@@ -54,6 +53,8 @@ class BufferFrame {
 	size_t in_use_by = 0;
 	/// The page logic that is called when the page is (un)loaded.
 	PageLogic *page_logic = nullptr;
+	/// Whether this frame belongs to a delta tree.
+	bool is_delta_tree = false;
 
 	friend class BufferManager;
 
@@ -136,7 +137,7 @@ class BufferManager {
 	/// If given, page_logic is stored in the frame and called after
 	/// loading/before unloading the page again.
 	BufferFrame &fix_page(SegmentID segment_id, PageID page_id, bool exclusive,
-						  PageLogic *page_logic);
+						  PageLogic *page_logic, bool is_delta_tree);
 
 	/// Releases a page. If dirty, its written to disk eventually.
 	void unfix_page(BufferFrame &frame, bool is_dirty);

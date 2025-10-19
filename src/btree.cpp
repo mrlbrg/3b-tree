@@ -31,7 +31,8 @@ BTree<KeyT, ValueT, UseDeltaTree>::BTree(SegmentID segment_id,
 
 	// TODO: Create some meta-data segment that stores information like the
 	// root's page id on file.
-	auto &frame = buffer_manager.fix_page(segment_id, 0, false, nullptr);
+	auto &frame =
+		buffer_manager.fix_page(segment_id, 0, false, nullptr, is_delta_tree);
 	auto &state = *(reinterpret_cast<BTree<KeyT, ValueT, UseDeltaTree> *>(
 		frame.get_data()));
 
@@ -48,8 +49,8 @@ BTree<KeyT, ValueT, UseDeltaTree>::BTree(SegmentID segment_id,
 		state.root = root;
 		state.next_free_page = next_free_page;
 		// Intialize root node.
-		auto &root_page =
-			buffer_manager.fix_page(segment_id, root, true, page_logic);
+		auto &root_page = buffer_manager.fix_page(segment_id, root, true,
+												  page_logic, is_delta_tree);
 		new (root_page.get_data()) LeafNode(buffer_manager.page_size);
 		buffer_manager.unfix_page(root_page, true);
 		is_dirty = true;
@@ -64,7 +65,8 @@ BTree<KeyT, ValueT, UseDeltaTree>::~BTree() {}
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 void BTree<KeyT, ValueT, UseDeltaTree>::clear() {
 	// Reset meta-data.
-	auto &frame = buffer_manager.fix_page(segment_id, 0, true, nullptr);
+	auto &frame =
+		buffer_manager.fix_page(segment_id, 0, true, nullptr, is_delta_tree);
 	auto &state = *(reinterpret_cast<BTree<KeyT, ValueT, UseDeltaTree> *>(
 		frame.get_data()));
 
@@ -74,8 +76,8 @@ void BTree<KeyT, ValueT, UseDeltaTree>::clear() {
 	state.next_free_page = next_free_page;
 
 	// Intialize root node.
-	auto &root_page =
-		buffer_manager.fix_page(segment_id, root, true, page_logic);
+	auto &root_page = buffer_manager.fix_page(segment_id, root, true,
+											  page_logic, is_delta_tree);
 	new (root_page.get_data()) LeafNode(buffer_manager.page_size);
 	buffer_manager.unfix_page(root_page, true);
 
@@ -119,15 +121,15 @@ BufferFrame &BTree<KeyT, ValueT, UseDeltaTree>::get_leaf(const KeyT &key,
 	// exclusively. Must not lock all exclusively on the path here. Start
 	// with inexclusively reading root. Check if it's a leaf. If so, restart
 	// but take exclusive lock and return.
-	auto *frame =
-		&buffer_manager.fix_page(segment_id, root, exclusive, page_logic);
+	auto *frame = &buffer_manager.fix_page(segment_id, root, exclusive,
+										   page_logic, is_delta_tree);
 	auto *node = reinterpret_cast<InnerNode *>(frame->get_data());
 
 	while (!node->is_leaf()) {
 		// Acquire child.
 		auto child_id = node->lookup(key);
-		auto *child_frame = &buffer_manager.fix_page(segment_id, child_id,
-													 exclusive, page_logic);
+		auto *child_frame = &buffer_manager.fix_page(
+			segment_id, child_id, exclusive, page_logic, is_delta_tree);
 
 		// Release parent.
 		buffer_manager.unfix_page(*frame, false);
@@ -193,7 +195,8 @@ void BTree<KeyT, ValueT, UseDeltaTree>::update(const KeyT &key,
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 PageID BTree<KeyT, ValueT, UseDeltaTree>::get_new_page() {
-	auto &frame = buffer_manager.fix_page(segment_id, 0, true, nullptr);
+	auto &frame =
+		buffer_manager.fix_page(segment_id, 0, true, nullptr, is_delta_tree);
 	auto &state = *(reinterpret_cast<BTree<KeyT, ValueT, UseDeltaTree> *>(
 		frame.get_data()));
 
@@ -204,6 +207,10 @@ PageID BTree<KeyT, ValueT, UseDeltaTree>::get_new_page() {
 	buffer_manager.unfix_page(frame, true);
 
 	++stats.pages_created;
+	if (is_delta_tree)
+		++stats.delta_pages_created;
+	else
+		++stats.btree_pages_created;
 
 	return page_id;
 }
@@ -217,8 +224,8 @@ void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 	//  No frames are to be held at this point.
 	while (true) {
 		// logger.log("Before split:\n" + std::string(*this));
-		auto *curr_frame =
-			&buffer_manager.fix_page(segment_id, root, true, page_logic);
+		auto *curr_frame = &buffer_manager.fix_page(segment_id, root, true,
+													page_logic, is_delta_tree);
 		auto *curr_node = reinterpret_cast<InnerNode *>(curr_frame->get_data());
 		// All nodes that lie on the path to the key with the leaf in the
 		// back and root in front.
@@ -228,8 +235,9 @@ void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 
 		// Collect all nodes on path to leaf for given key.
 		while (!curr_node->is_leaf()) {
-			curr_frame = &buffer_manager.fix_page(
-				segment_id, curr_node->lookup(key), true, page_logic);
+			curr_frame =
+				&buffer_manager.fix_page(segment_id, curr_node->lookup(key),
+										 true, page_logic, is_delta_tree);
 			path.push_front(curr_frame);
 			locked_nodes.push_back(curr_frame);
 			curr_node = reinterpret_cast<InnerNode *>(curr_frame->get_data());
@@ -250,8 +258,8 @@ void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 
 		// Split leaf.
 		const auto new_pid = get_new_page();
-		auto *new_leaf_frame =
-			&buffer_manager.fix_page(segment_id, new_pid, true, page_logic);
+		auto *new_leaf_frame = &buffer_manager.fix_page(
+			segment_id, new_pid, true, page_logic, is_delta_tree);
 		assert(new_leaf_frame->is_new());
 		auto *new_leaf = (new (new_leaf_frame->get_data())
 							  LeafNode(buffer_manager.page_size));
@@ -272,8 +280,8 @@ void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 				auto old_root = root;
 				auto new_root = get_new_page();
 
-				auto &frame =
-					buffer_manager.fix_page(segment_id, 0, true, nullptr);
+				auto &frame = buffer_manager.fix_page(segment_id, 0, true,
+													  nullptr, is_delta_tree);
 				auto &state =
 					*(reinterpret_cast<BTree<KeyT, ValueT, UseDeltaTree> *>(
 						frame.get_data()));
@@ -281,8 +289,8 @@ void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 				state.root = new_root;
 				buffer_manager.unfix_page(frame, true);
 
-				auto *root_frame = &buffer_manager.fix_page(segment_id, root,
-															true, page_logic);
+				auto *root_frame = &buffer_manager.fix_page(
+					segment_id, root, true, page_logic, is_delta_tree);
 				assert(root_frame->is_new());
 				new (root_frame->get_data())
 					InnerNode(buffer_manager.page_size, ++max_level, old_root);
@@ -301,8 +309,8 @@ void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 			if (!curr_node->has_space(curr_key, curr_pid)) {
 				// Create new node.
 				const auto new_pid = get_new_page();
-				auto *new_frame = &buffer_manager.fix_page(segment_id, new_pid,
-														   true, page_logic);
+				auto *new_frame = &buffer_manager.fix_page(
+					segment_id, new_pid, true, page_logic, is_delta_tree);
 				assert(new_frame->is_new());
 				auto *new_node = (new (new_frame->get_data()) InnerNode(
 					buffer_manager.page_size, curr_node->level,
@@ -345,8 +353,8 @@ std::ostream &operator<<(std::ostream &os,
 
 	auto size = type.size();
 	// Acquire root to get height of tree.
-	auto &root_frame = type.buffer_manager.fix_page(type.segment_id, type.root,
-													false, type.page_logic);
+	auto &root_frame = type.buffer_manager.fix_page(
+		type.segment_id, type.root, false, type.page_logic, type.is_delta_tree);
 	auto *node = reinterpret_cast<
 		typename BTree<KeyT, ValueT, UseDeltaTree>::InnerNode *>(
 		root_frame.get_data());
@@ -370,7 +378,8 @@ std::ostream &operator<<(std::ostream &os,
 		for (auto pid : nodes_on_current_level) {
 			// Acquire page.
 			auto &frame = type.buffer_manager.fix_page(type.segment_id, pid,
-													   false, type.page_logic);
+													   false, type.page_logic,
+													   type.is_delta_tree);
 			auto *node = reinterpret_cast<
 				typename BTree<KeyT, ValueT, UseDeltaTree>::InnerNode *>(
 				frame.get_data());
@@ -399,8 +408,9 @@ std::ostream &operator<<(std::ostream &os,
 	// Traverse leaf level
 	os << "################ LEVEL " << level << " ###############" << std::endl;
 	for (auto pid : nodes_on_current_level) {
-		auto &frame = type.buffer_manager.fix_page(type.segment_id, pid, false,
-												   type.page_logic);
+		auto &frame = type.buffer_manager.fix_page(
+			type.segment_id, pid, false, type.page_logic, type.is_delta_tree);
+
 		auto *leaf = reinterpret_cast<
 			typename BTree<KeyT, ValueT, UseDeltaTree>::LeafNode *>(
 			frame.get_data());
@@ -424,8 +434,8 @@ std::ostream &operator<<(std::ostream &os,
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 size_t BTree<KeyT, ValueT, UseDeltaTree>::size() const {
 	// Acquire root to get height of tree.
-	auto &root_frame =
-		buffer_manager.fix_page(segment_id, root, false, page_logic);
+	auto &root_frame = buffer_manager.fix_page(segment_id, root, false,
+											   page_logic, is_delta_tree);
 	auto *node = reinterpret_cast<
 		typename BTree<KeyT, ValueT, UseDeltaTree>::InnerNode *>(
 		root_frame.get_data());
@@ -439,8 +449,8 @@ size_t BTree<KeyT, ValueT, UseDeltaTree>::size() const {
 		std::vector<PageID> children{};
 		for (auto pid : nodes_on_current_level) {
 			// Acquire page.
-			auto &frame =
-				buffer_manager.fix_page(segment_id, pid, false, page_logic);
+			auto &frame = buffer_manager.fix_page(segment_id, pid, false,
+												  page_logic, is_delta_tree);
 			auto *node = reinterpret_cast<
 				typename BTree<KeyT, ValueT, UseDeltaTree>::InnerNode *>(
 				frame.get_data());
@@ -465,8 +475,8 @@ size_t BTree<KeyT, ValueT, UseDeltaTree>::size() const {
 	// Traverse leaf level
 	size_t result = 0;
 	for (auto pid : nodes_on_current_level) {
-		auto &frame =
-			buffer_manager.fix_page(segment_id, pid, false, page_logic);
+		auto &frame = buffer_manager.fix_page(segment_id, pid, false,
+											  page_logic, is_delta_tree);
 		auto &leaf = *reinterpret_cast<
 			typename BTree<KeyT, ValueT, UseDeltaTree>::LeafNode *>(
 			frame.get_data());
@@ -482,7 +492,8 @@ size_t BTree<KeyT, ValueT, UseDeltaTree>::size() const {
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 size_t BTree<KeyT, ValueT, UseDeltaTree>::height() {
-	auto &frame = buffer_manager.fix_page(segment_id, root, false, page_logic);
+	auto &frame = buffer_manager.fix_page(segment_id, root, false, page_logic,
+										  is_delta_tree);
 	auto &root_node = *reinterpret_cast<InnerNode *>(frame.get_data());
 	size_t height = root_node.level + 1;
 	buffer_manager.unfix_page(frame, false);

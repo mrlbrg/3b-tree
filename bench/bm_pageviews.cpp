@@ -1,5 +1,6 @@
 #include "bbbtree/bbbtree.h"
 #include "bbbtree/btree.h"
+#include "bbbtree/btree_with_tracking.h"
 #include "bbbtree/buffer_manager.h"
 #include "bbbtree/database.h"
 #include "bbbtree/logger.h"
@@ -17,12 +18,13 @@ using KeyT = UInt64;
 using BBBTreeDB = Database<BBBTree, KeyT>;
 using BTreeDB = Database<BTree, KeyT>;
 using BTreeIndex = BTree<KeyT, TID>;
+using BTreeWithTrackingIndex = BTreeWithTracking<KeyT, TID>;
 using BBBTreeIndex = BBBTree<KeyT, TID>;
 // -----------------------------------------------------------------
 static const constexpr size_t BENCH_PAGE_SIZE = 4096;
-static const constexpr size_t BENCH_NUM_PAGES = 500;
-static const constexpr size_t BENCH_WA_THRESHOLD = 0;
-static const constexpr size_t BENCH_UPDATE_THRESHOLD = 5;
+static const constexpr size_t BENCH_NUM_PAGES = 400;
+static const constexpr size_t BENCH_WA_THRESHOLD = 5;
+static const constexpr size_t BENCH_UPDATE_RATIO = 5;
 static const constexpr size_t BENCH_SAMPLE_SIZE = 5;
 static const constexpr SegmentID BENCH_SEGMENT_ID = 2;
 // The file with the distinct pageview keys.
@@ -37,7 +39,7 @@ static const constexpr auto OPERATIONS_FILE = "operations_en_sample_5_5.csv";
 // -----------------------------------------------------------------
 /// Generate the operations filename based on the update ratio.
 std::string
-update_ratio_to_ops_filename(size_t update_ratio = BENCH_UPDATE_THRESHOLD) {
+update_ratio_to_ops_filename(size_t update_ratio = BENCH_UPDATE_RATIO) {
 	return "operations_en_sample_" + std::to_string(BENCH_SAMPLE_SIZE) + "_" +
 		   std::to_string(update_ratio) + ".csv";
 }
@@ -107,6 +109,8 @@ static void BM_PageViews_Mixed_DB(benchmark::State &state) {
 
 	DatabaseUnderTest db{page_size, num_pages, wa_threshold, true};
 
+	// TODO: Disable buffering until the after the insertions.
+
 	// Propagate the database with pageview keys
 	static std::vector<uint64_t> keys = LoadPageviewKeys(PAGES_FILE);
 
@@ -154,7 +158,7 @@ static void BM_PageViews_Mixed_Index(benchmark::State &state) {
 
 	BufferManager buffer_manager{page_size, num_pages, true};
 	IndexUnderTest index{BENCH_SEGMENT_ID, buffer_manager, wa_threshold};
-
+	index.disable_buffering();
 	// Propagate the database with pageview keys
 	static std::vector<uint64_t> keys = LoadPageviewKeys(PAGES_FILE);
 
@@ -170,6 +174,7 @@ static void BM_PageViews_Mixed_Index(benchmark::State &state) {
 	buffer_manager.clear_all(true);
 	stats.clear();
 	logger.clear();
+	index.enable_buffering();
 
 	for (auto _ : state) {
 		for (const auto &op : ops) {
@@ -211,6 +216,11 @@ static void BM_PageViews_Insert_Index(benchmark::State &state) {
 	static const std::vector<uint64_t> keys = LoadPageviewKeys(PAGES_FILE);
 
 	for (auto _ : state) {
+		state.PauseTiming();
+		stats.clear();
+		buffer_manager.clear_all(false);
+		index.clear();
+		state.ResumeTiming();
 		for (auto key : keys) {
 			TID value = 0; // Value is dummy
 			KeyT k = key;
@@ -232,6 +242,7 @@ static void BM_PageViews_Lookup_Index(benchmark::State &state) {
 
 	BufferManager buffer_manager{page_size, num_pages, true};
 	IndexUnderTest index{BENCH_SEGMENT_ID, buffer_manager, wa_threshold};
+	index.disable_buffering();
 
 	// Propagate the database with pageview keys
 	static std::vector<uint64_t> keys = LoadPageviewKeys(PAGES_FILE);
@@ -247,6 +258,7 @@ static void BM_PageViews_Lookup_Index(benchmark::State &state) {
 	// Clear buffer manager to force write-backs.
 	buffer_manager.clear_all(true);
 	stats.clear();
+	index.enable_buffering();
 
 	for (auto _ : state) {
 		for (const auto &op : ops) {
@@ -292,22 +304,40 @@ BENCHMARK_TEMPLATE(BM_PageViews_Mixed_DB, BBBTreeDB)
 	->Repetitions(1);
 // -----------------------------------------------------------------
 BENCHMARK_TEMPLATE(BM_PageViews_Mixed_Index, BTreeIndex)
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD,
-			BENCH_UPDATE_THRESHOLD})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD, 0})
+	->Args({200, BENCH_PAGE_SIZE, 5, 0})
+	->Args({200, BENCH_PAGE_SIZE, 5, 5})
+	->Args({200, BENCH_PAGE_SIZE, 5, 10})
+	->Args({200, BENCH_PAGE_SIZE, 5, 50})
+	->Args({200, BENCH_PAGE_SIZE, 5, 75})
+	->Args({200, BENCH_PAGE_SIZE, 5, 100})
 	->Iterations(1)
 	->Repetitions(1);
 BENCHMARK_TEMPLATE(BM_PageViews_Mixed_Index, BBBTreeIndex)
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD,
-			BENCH_UPDATE_THRESHOLD})
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD, 0})
+	->Args({200, BENCH_PAGE_SIZE, 5, 0})
+	->Args({200, BENCH_PAGE_SIZE, 5, 5})
+	->Args({200, BENCH_PAGE_SIZE, 5, 10})
+	->Args({200, BENCH_PAGE_SIZE, 5, 50})
+	->Args({200, BENCH_PAGE_SIZE, 5, 75})
+	->Args({200, BENCH_PAGE_SIZE, 5, 100})
 	->Iterations(1)
 	->Repetitions(1);
 // -----------------------------------------------------------------
 BENCHMARK_TEMPLATE(BM_PageViews_Insert_Index, BTreeIndex)
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD});
+	->Args({100, BENCH_PAGE_SIZE, 5})
+	->Args({200, BENCH_PAGE_SIZE, 5})
+	->Args({300, BENCH_PAGE_SIZE, 5})
+	->Args({400, BENCH_PAGE_SIZE, 5})
+	->Args({500, BENCH_PAGE_SIZE, 5})
+	->Iterations(1)
+	->Repetitions(1);
 BENCHMARK_TEMPLATE(BM_PageViews_Insert_Index, BBBTreeIndex)
-	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD});
+	->Args({100, BENCH_PAGE_SIZE, 5})
+	->Args({200, BENCH_PAGE_SIZE, 5})
+	->Args({300, BENCH_PAGE_SIZE, 5})
+	->Args({400, BENCH_PAGE_SIZE, 5})
+	->Args({500, BENCH_PAGE_SIZE, 5})
+	->Iterations(1)
+	->Repetitions(1);
 // -----------------------------------------------------------------
 BENCHMARK_TEMPLATE(BM_PageViews_Lookup_Index, BTreeIndex)
 	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})

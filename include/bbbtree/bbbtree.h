@@ -34,15 +34,16 @@ class DeltaTree : public PageLogic, public BTree<PID, Deltas<KeyT, ValueT>> {
 			  float wa_threshold)
 		: PageLogic(),
 		  BTree<PID, Deltas<KeyT, ValueT>>(segment_id, buffer_manager, nullptr),
-		  wa_threshold(wa_threshold) {}
+		  wa_threshold(wa_threshold) {
+		this->is_delta_tree = true;
+	}
 
 	/// Scans the given BTree node for dirty entries and buffers them in the
 	/// delta tree.
 	/// `first` returns true if unloading was successful.
 	// `second` returns true if the page should be written out to disk.
-	std::pair<bool, bool> before_unload(char *data, const State &state,
-										PageID page_id,
-										size_t page_size) override;
+	bool before_unload(char *data, const State &state, PageID page_id,
+					   size_t page_size) override;
 	/// Looks up the deltas for the given node and applies them.
 	void after_load(char *data, PageID page_id) override;
 
@@ -130,6 +131,11 @@ class BBBTree {
 		btree.clear();
 		delta_tree.clear();
 	}
+
+	/// Disables buffering if this is a delta tree.
+	void disable_buffering() { delta_tree.disable_buffering(); }
+	/// Enables buffering if this is a delta tree.
+	void enable_buffering() { delta_tree.enable_buffering(); }
 
 	/// Prints the tree.
 	friend std::ostream &

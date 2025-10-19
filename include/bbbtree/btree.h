@@ -147,6 +147,12 @@ struct BTree : public Segment {
 	/// Sets the height in the stats.
 	void set_height() { stats.b_tree_height = height(); }
 
+	/// Disables buffering if this is a delta tree.
+	void disable_buffering() { buffering_enabled = false; }
+	/// Enables buffering if this is a delta tree.
+	/// Make sure to call this only if the delta tree is empty.
+	void enable_buffering() { buffering_enabled = true; }
+
 	/// TODO: Find a more elegant solution for persistency:
 	/// State is persisted at page 0 of this segment.
 	/// Read and written out at construction/destruction time.
@@ -514,6 +520,10 @@ struct BTree : public Segment {
 	/// The page logic specific to this tree. Called back by the buffer
 	/// manager when loading/unloading pages.
 	PageLogic *page_logic;
+	/// Whether this tree is a delta tree. Only for tracking purposes.
+	bool is_delta_tree = false;
+	/// If buffering of delta trees is enabled. Only relevant for delta trees.
+	bool buffering_enabled = true;
 
 	/// Returns the appropriate leaf page for a given key.
 	/// Potentially splits nodes if full.

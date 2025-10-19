@@ -44,24 +44,24 @@ void BufferManager::reset(BufferFrame &frame) {
 	assert(!frame.in_use_by);
 	frame.state = State::UNDEFINED;
 	frame.page_logic = nullptr;
+	frame.is_delta_tree = false;
 }
 // ----------------------------------------------------------------
 bool BufferManager::unload(BufferFrame &frame) {
 	// Sanity Check: Caller must ensure that page needs to be unloaded.
 	assert(frame.state == State::DIRTY || frame.state == State::NEW);
 
-	auto [success, continue_unload] =
+	auto continue_unload =
 		frame.page_logic
 			? frame.page_logic->before_unload(frame.data, frame.state,
 											  frame.page_id, page_size)
-			: std::make_pair(true, true);
+			: true;
 
-	if (!success)
-		return false; // Unload is not allowed for this frame. Probably because
-					  // the delta tree is locked currently.
-
-	if (!continue_unload)
+	if (!continue_unload) {
+		assert(!frame.is_delta_tree);
+		++stats.btree_pages_write_deferred;
 		return true; // Unload is not continued.
+	}
 
 	size_t page_begin = frame.page_id * page_size;
 	size_t page_end = page_begin + page_size;
@@ -75,6 +75,11 @@ bool BufferManager::unload(BufferFrame &frame) {
 	file.write_block(frame.data, page_begin, page_size);
 	stats.bytes_written_physically += page_size;
 	stats.pages_written += 1;
+
+	if (frame.is_delta_tree)
+		++stats.delta_pages_written;
+	else
+		++stats.btree_pages_written;
 
 	return true;
 }
@@ -106,8 +111,8 @@ void BufferManager::load(BufferFrame &frame, SegmentID segment_id,
 }
 // -----------------------------------------------------------------
 BufferFrame &BufferManager::fix_page(SegmentID segment_id, PageID page_id,
-									 bool /*exclusive*/,
-									 PageLogic *page_logic) {
+									 bool /*exclusive*/, PageLogic *page_logic,
+									 bool is_delta_tree) {
 #ifndef NDEBUG
 	logger.log("Fixing page " + std::to_string(segment_id) + "." +
 			   std::to_string(page_id) + " {");
@@ -123,24 +128,35 @@ BufferFrame &BufferManager::fix_page(SegmentID segment_id, PageID page_id,
 		//  TODO: Already used by someone else?
 		auto &frame = frame_it->second;
 		++(frame->in_use_by);
+		assert(frame.is_delta_tree == is_delta_tree);
 #ifndef NDEBUG
 		logger.log("Page already in buffer.");
 		--logger;
 		logger.log("}");
 #endif
 		stats.buffer_hits++;
+		if (is_delta_tree)
+			++stats.delta_pages_hit;
+		else
+			++stats.btree_pages_hit;
 		return *(frame_it->second);
 	}
 
-	stats.buffer_misses++;
+	if (is_delta_tree)
+		++stats.delta_pages_missed;
+	else
+		++stats.btree_pages_missed;
+	++stats.buffer_misses;
 
 	// Load page into buffer
 	auto &frame = get_free_frame();
 	assert(frame.in_use_by == 0);
 	assert(frame.page_logic == nullptr);
+	assert(frame.is_delta_tree == false);
 	id_to_frame[segment_page_id] = &frame;
 	frame.in_use_by = 1;
 	frame.page_logic = page_logic;
+	frame.is_delta_tree = is_delta_tree;
 
 #ifndef NDEBUG
 	logger.log("Loading page into buffer.");
@@ -187,6 +203,11 @@ bool BufferManager::remove(BufferFrame &frame, bool write_back) {
 		frame.page_id ^ (static_cast<uint64_t>(frame.segment_id) << 48);
 	auto num_removed = id_to_frame.erase(segment_page_id);
 	assert(num_removed == 1);
+	// Set stats.
+	if (frame.is_delta_tree)
+		++stats.delta_pages_evicted;
+	else
+		++stats.btree_pages_evicted;
 	// Release frame.
 	reset(frame);
 	free_buffer_frames.push_back(&frame);
@@ -286,9 +307,9 @@ void BufferManager::clear_all(bool write_back) {
 		// reopening them.
 	}
 restart:
-	for (const auto &[page_id, frame] : id_to_frame) {
+	for (const auto &[page_id, frame] : id_to_frame)
 		remove(*frame, write_back);
-	}
+
 	// During `unload` of BTree nodes, some pages might have been loaded
 	// into the buffer to store the deltas. Therefore we might have to go
 	// another round to also clear all delta tree pages from the buffer.
@@ -314,7 +335,8 @@ bool BufferManager::validate() const {
 	for (auto [page_id, frame_ptr] : id_to_frame) {
 		if (frame_ptr->state == State::UNDEFINED) {
 			// logger.log("Validating BufferManager...");
-			// logger.log("Inconsistent state: page " + std::to_string(page_id)
+			// logger.log("Inconsistent state: page " +
+			// std::to_string(page_id)
 			// +
 			//    " is in id_to_frame but UNDEFINED");
 			// logger.log(*this);
@@ -325,9 +347,9 @@ bool BufferManager::validate() const {
 		if (frame_ptr->segment_id != segment_id || frame_ptr->page_id != pid) {
 			// logger.log("Validating BufferManager...");
 			// logger.log("Inconsistent state: page " +
-			// 		   std::to_string(segment_id) + "." + std::to_string(pid) +
-			// 		   " has wrong segment_id or page_id");
-			// logger.log(*this);
+			// 		   std::to_string(segment_id) + "." +
+			// std::to_string(pid) + 		   " has wrong segment_id or
+			// page_id"); logger.log(*this);
 			return false;
 		}
 	}
