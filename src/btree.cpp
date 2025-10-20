@@ -560,9 +560,9 @@ BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::split(InnerNode &new_node,
 	assert(this->slot_count > 0);
 	uint16_t pivot_i = (this->slot_count + 1) / 2 - 1;
 
-	logger.log("inner," + std::to_string(this->slot_count) + "," +
-			   std::to_string(sizeof(Pivot)) + "," +
-			   std::to_string(UseDeltaTree));
+	// logger.log("inner," + std::to_string(this->slot_count) + "," +
+	// 		   std::to_string(sizeof(Pivot)) + "," +
+	// 		   std::to_string(UseDeltaTree));
 
 	// Second half of slots is inserted into new, right leaf.
 	const auto *slot_to_copy = this->slots_begin() + pivot_i + 1;
@@ -850,9 +850,9 @@ const KeyT BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::split(
 	assert(this->slot_count >= 1);
 	assert(page_size > 0);
 
-	logger.log("leaf," + std::to_string(this->slot_count) + "," +
-			   std::to_string(sizeof(LeafSlot)) + "," +
-			   std::to_string(UseDeltaTree));
+	// logger.log("leaf," + std::to_string(this->slot_count) + "," +
+	// 		   std::to_string(sizeof(LeafSlot)) + "," +
+	// 		   std::to_string(UseDeltaTree));
 
 	// Determine how many keys go left/right.
 	// If the new key goes in the left node, move more entries to the new

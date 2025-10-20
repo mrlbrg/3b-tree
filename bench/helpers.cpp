@@ -57,6 +57,46 @@ std::vector<uint64_t> LoadPageviewKeys(const std::string &filename) {
 	return row_numbers;
 }
 // -----------------------------------------------------------------
+// Load the first column (row_number) from a CSV file of the form
+// `<row_number,project,page_title,views,bytes>`
+std::vector<std::string>
+LoadPageviewKeysAsStrings(const std::string &filename) {
+	std::vector<std::string> articles;
+	auto path = get_data_file(filename);
+	std::ifstream file(path);
+	if (!file.is_open()) {
+		throw std::runtime_error("Failed to open file: " + path.string());
+	}
+
+	std::string line;
+	// --- Skip header row ---
+	if (!std::getline(file, line)) {
+		throw std::runtime_error("CSV file is empty: " + filename);
+	}
+
+	while (std::getline(file, line)) {
+		if (line.empty())
+			continue;
+
+		std::stringstream ss(line);
+		std::string cell;
+
+		// Skip first column (row_number)
+		if (!std::getline(ss, cell, ','))
+			continue;
+
+		// Skip second column (project)
+		if (!std::getline(ss, cell, ','))
+			continue;
+
+		// Read third column (page_title)
+		std::string page_title;
+		if (std::getline(ss, page_title, ','))
+			articles.push_back(page_title);
+	}
+	return articles;
+}
+// -----------------------------------------------------------------
 void SetBenchmarkCounters(benchmark::State &state, const Stats &stats) {
 	for (const auto &[key, value] : stats.get_stats())
 		state.counters[key] = value;

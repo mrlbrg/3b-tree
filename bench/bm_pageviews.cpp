@@ -15,11 +15,14 @@ using namespace bbbtree;
 namespace {
 // -----------------------------------------------------------------
 using KeyT = UInt64;
+using VarKeyT = String;
 using BBBTreeDB = Database<BBBTree, KeyT>;
 using BTreeDB = Database<BTree, KeyT>;
 using BTreeIndex = BTree<KeyT, TID>;
+using BTreeIndexVar = BTree<VarKeyT, TID>;
 using BTreeWithTrackingIndex = BTreeWithTracking<KeyT, TID>;
 using BBBTreeIndex = BBBTree<KeyT, TID>;
+using BBBTreeIndexVar = BBBTree<VarKeyT, TID>;
 // -----------------------------------------------------------------
 static const constexpr size_t BENCH_PAGE_SIZE = 4096;
 static const constexpr size_t BENCH_NUM_PAGES = 400;
@@ -203,7 +206,7 @@ static void BM_PageViews_Mixed_Index(benchmark::State &state) {
 template <typename IndexUnderTest>
 static void BM_PageViews_Insert_Index(benchmark::State &state) {
 	stats.clear();
-	// logger.clear();
+	logger.clear();
 
 	size_t num_pages = state.range(0);
 	uint16_t page_size = state.range(1);
@@ -270,6 +273,95 @@ static void BM_PageViews_Lookup_Index(benchmark::State &state) {
 	SetBenchmarkCounters(state, stats);
 }
 // -----------------------------------------------------------------
+template <typename IndexUnderTest>
+static void BM_PageViews_Insert_Index_Var(benchmark::State &state) {
+	stats.clear();
+	logger.clear();
+
+	size_t num_pages = state.range(0);
+	uint16_t page_size = state.range(1);
+	float wa_threshold = static_cast<float>(state.range(2)) / 100.0;
+
+	BufferManager buffer_manager{page_size, num_pages, true};
+	IndexUnderTest index{BENCH_SEGMENT_ID, buffer_manager, wa_threshold};
+
+	// Propagate the database with pageview keys
+	static const std::vector<std::string> keys =
+		LoadPageviewKeysAsStrings(PAGES_FILE);
+
+	// Insert as many bytes as the integer version
+	for (auto _ : state) {
+		state.PauseTiming();
+		stats.clear();
+		buffer_manager.clear_all(false);
+		index.clear();
+		state.ResumeTiming();
+		for (auto &key : keys) {
+			TID value = 0; // Value is dummy
+			VarKeyT k{key};
+			auto success = index.insert(k, value);
+			stats.bytes_written_logically += k.size() + value.size();
+			assert(success);
+		}
+	}
+
+	index.set_height();
+	SetBenchmarkCounters(state, stats);
+}
+// -----------------------------------------------------------------
+template <typename IndexUnderTest>
+static void BM_PageViews_Mixed_Index_Var(benchmark::State &state) {
+	size_t num_pages = state.range(0);
+	uint16_t page_size = state.range(1);
+	float wa_threshold = static_cast<float>(state.range(2)) / 100.0;
+	size_t update_ratio = state.range(3);
+	auto ops_filename = update_ratio_to_ops_filename(update_ratio);
+
+	BufferManager buffer_manager{page_size, num_pages, true};
+	IndexUnderTest index{BENCH_SEGMENT_ID, buffer_manager, wa_threshold};
+	index.disable_buffering();
+	// Propagate the database with pageview keys
+	static std::vector<std::string> keys =
+		LoadPageviewKeysAsStrings(PAGES_FILE);
+
+	for (auto &key : keys) {
+		auto success = index.insert(VarKeyT{key}, 0); // Value is dummy
+		assert(success);
+	}
+
+	// Get the workload
+	std::vector<Operation> ops = LoadPageviewOps(ops_filename);
+
+	// Clear buffer manager to force write-backs.
+	buffer_manager.clear_all(true);
+	stats.clear();
+	logger.clear();
+	index.enable_buffering();
+
+	for (auto _ : state) {
+		for (const auto &op : ops) {
+			switch (op.op_type) {
+			case 'L':
+				benchmark::DoNotOptimize(index.lookup(VarKeyT{op.page_title}));
+				break;
+			case 'U': {
+				TID value = 0; // Value is dummy
+				VarKeyT key{op.page_title};
+
+				index.update(key, value);
+				stats.bytes_written_logically += key.size() + value.size();
+				break;
+			}
+			default:
+				throw std::logic_error("Unknown operation type in workload.");
+			}
+		}
+	}
+
+	index.set_height();
+	SetBenchmarkCounters(state, stats);
+}
+// -----------------------------------------------------------------
 } // namespace
 // -----------------------------------------------------------------
 // 0: Number of pages in memory
@@ -304,38 +396,20 @@ BENCHMARK_TEMPLATE(BM_PageViews_Mixed_DB, BBBTreeDB)
 	->Repetitions(1);
 // -----------------------------------------------------------------
 BENCHMARK_TEMPLATE(BM_PageViews_Mixed_Index, BTreeIndex)
-	->Args({200, BENCH_PAGE_SIZE, 5, 0})
-	->Args({200, BENCH_PAGE_SIZE, 5, 5})
-	->Args({200, BENCH_PAGE_SIZE, 5, 10})
-	->Args({200, BENCH_PAGE_SIZE, 5, 50})
-	->Args({200, BENCH_PAGE_SIZE, 5, 75})
-	->Args({200, BENCH_PAGE_SIZE, 5, 100})
+	->Args({300, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD, 5})
 	->Iterations(1)
 	->Repetitions(1);
 BENCHMARK_TEMPLATE(BM_PageViews_Mixed_Index, BBBTreeIndex)
-	->Args({200, BENCH_PAGE_SIZE, 5, 0})
-	->Args({200, BENCH_PAGE_SIZE, 5, 5})
-	->Args({200, BENCH_PAGE_SIZE, 5, 10})
-	->Args({200, BENCH_PAGE_SIZE, 5, 50})
-	->Args({200, BENCH_PAGE_SIZE, 5, 75})
-	->Args({200, BENCH_PAGE_SIZE, 5, 100})
+	->Args({300, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD, 5})
 	->Iterations(1)
 	->Repetitions(1);
 // -----------------------------------------------------------------
 BENCHMARK_TEMPLATE(BM_PageViews_Insert_Index, BTreeIndex)
-	->Args({100, BENCH_PAGE_SIZE, 5})
-	->Args({200, BENCH_PAGE_SIZE, 5})
-	->Args({300, BENCH_PAGE_SIZE, 5})
-	->Args({400, BENCH_PAGE_SIZE, 5})
-	->Args({500, BENCH_PAGE_SIZE, 5})
+	->Args({200, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
 	->Iterations(1)
 	->Repetitions(1);
 BENCHMARK_TEMPLATE(BM_PageViews_Insert_Index, BBBTreeIndex)
-	->Args({100, BENCH_PAGE_SIZE, 5})
-	->Args({200, BENCH_PAGE_SIZE, 5})
-	->Args({300, BENCH_PAGE_SIZE, 5})
-	->Args({400, BENCH_PAGE_SIZE, 5})
-	->Args({500, BENCH_PAGE_SIZE, 5})
+	->Args({200, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
 	->Iterations(1)
 	->Repetitions(1);
 // -----------------------------------------------------------------
@@ -345,6 +419,26 @@ BENCHMARK_TEMPLATE(BM_PageViews_Lookup_Index, BTreeIndex)
 	->Repetitions(1);
 BENCHMARK_TEMPLATE(BM_PageViews_Lookup_Index, BBBTreeIndex)
 	->Args({BENCH_NUM_PAGES, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
+	->Iterations(1)
+	->Repetitions(1);
+// -----------------------------------------------------------------
+BENCHMARK_TEMPLATE(BM_PageViews_Insert_Index_Var, BTreeIndexVar)
+	->Args({300, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
+	->Args({300, BENCH_PAGE_SIZE, 7})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK_TEMPLATE(BM_PageViews_Insert_Index_Var, BBBTreeIndexVar)
+	->Args({300, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD})
+	->Args({300, BENCH_PAGE_SIZE, 7})
+	->Iterations(1)
+	->Repetitions(1);
+// -----------------------------------------------------------------
+BENCHMARK_TEMPLATE(BM_PageViews_Mixed_Index_Var, BTreeIndexVar)
+	->Args({300, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD, 5})
+	->Iterations(1)
+	->Repetitions(1);
+BENCHMARK_TEMPLATE(BM_PageViews_Mixed_Index_Var, BBBTreeIndexVar)
+	->Args({300, BENCH_PAGE_SIZE, BENCH_WA_THRESHOLD, 5})
 	->Iterations(1)
 	->Repetitions(1);
 // -----------------------------------------------------------------

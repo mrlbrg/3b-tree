@@ -15,6 +15,7 @@ struct Operation {
 };
 // -----------------------------------------------------------------
 std::vector<uint64_t> LoadPageviewKeys(const std::string &filename);
+std::vector<std::string> LoadPageviewKeysAsStrings(const std::string &filename);
 std::vector<Operation> LoadPageviewOps(const std::string &filename);
 void SetBenchmarkCounters(benchmark::State &state, const Stats &stats);
 // -----------------------------------------------------------------
