@@ -173,66 +173,54 @@ template <KeyIndexable KeyT, ValueIndexable ValueT>
 template <typename NodeT, typename DeltasT>
 void DeltaTree<KeyT, ValueT>::apply_deltas(NodeT *node, const DeltasT &deltas,
 										   uint16_t slot_count) {
-	auto apply_delta = [](const auto &delta, NodeT *node) {
+	auto apply_delta = [](const auto &delta, NodeT *node, size_t page_size) {
 		auto &[entry, op_type] = delta;
 		auto &[key, value] = entry;
-		if (op_type == OperationType::Inserted) {
+		switch (op_type) {
+		case OperationType::Inserted: {
+			if (!node->has_space(key, value))
+				node->compactify(page_size);
+			assert(node->has_space(key, value));
 			auto success = node->insert(key, value);
 			assert(success);
-		} else if (op_type == OperationType::Updated) {
+			break;
+		}
+		case OperationType::Updated:
 			node->update(key, value);
-		} else {
+			break;
+		case OperationType::Deleted:
+		default:
 			throw std::logic_error("DeltaTree::after_load(): "
 								   "Operation Type not implemented "
 								   "yet.");
 		}
 	};
 
-	auto out_of_place_apply = [&](const size_t page_size, size_t deltas_i) {
-		// Get the space we need temporarily.
-		size_t insert_size = 0;
-		for (auto i = deltas_i; i < deltas.size(); ++i) {
-			auto &[entry, op_type] = deltas[i];
-			auto &[key, value] = entry;
-			insert_size += node->required_space(key, value);
-		}
-		// Create a buffer for the new node.
-		std::vector<std::byte> buffer{page_size + insert_size};
-		std::memcpy(buffer.data(), node->get_data(), buffer.size());
-		auto *buffered_node = reinterpret_cast<NodeT *>(buffer.data());
-		// Make space for insert deltas.
-		buffered_node->compactify(buffer.size());
-		// Insert deltas.
-		for (auto i = deltas_i; i < deltas.size(); ++i)
-			apply_delta(deltas[i], buffered_node);
-		// Cut off all split slots.
-		buffered_node->slot_count = slot_count;
-		// Have to compactify again to make sure everything fits when shrinking.
-		buffered_node->compactify(buffer.size());
-		// Shrink node to original size.
-		buffered_node->shrink(buffer.size(), page_size);
-		// Copy back to original node.
-		std::memcpy(node, buffered_node, page_size);
-	};
-
-	// Sanity Check: There must have been either inserts or node splits.
+	// Sanity Check: There must have been either deltas or node splits.
 	assert(!deltas.empty() || node->slot_count != slot_count);
 
-	// Insert deltas into the node.
+	// Analyze delta stream to determine cut-off point.
+	// TODO: When implementing deletes, they should be applied here.
+	auto cut_off = slot_count;
 	for (size_t i = 0; i < deltas.size(); ++i) {
 		auto &[entry, op] = deltas[i];
-		if (node->has_space(entry.key, entry.value)) {
-			apply_delta(deltas[i], node);
-		} else {
-			// No space left on the node. Apply the rest of the deltas
-			// out-of-place and compactify to fit the node again.
-			out_of_place_apply(this->buffer_manager.page_size, i);
-			return;
+		switch (op) {
+		case OperationType::Inserted:
+			--cut_off;
+			break;
+		default:
+			break;
 		}
 	}
 
-	// Cut off the slots that were split.
-	node->slot_count = slot_count;
+	// Remove split off slots.
+	node->slot_count = cut_off;
+
+	// Apply deltas to the node.
+	for (size_t i = 0; i < deltas.size(); ++i) {
+		auto &[entry, op] = deltas[i];
+		apply_delta(deltas[i], node, this->buffer_manager.page_size);
+	}
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT>

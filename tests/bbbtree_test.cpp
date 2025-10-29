@@ -269,19 +269,18 @@ TEST_F(BBBTreeTest, BufferLeafDeltasInDeltaTree) {
 // -----------------------------------------------------------------
 /// Load a node from the disk.
 TEST_F(BBBTreeTest, LeafSplitsInDeltaTree) {
+	stats.clear();
 	size_t page_size = TEST_PAGE_SIZE;
 	std::unique_ptr<BufferManager> buffer_manager =
 		std::make_unique<BufferManager>(page_size, TEST_NUM_PAGES, true);
 	std::unique_ptr<BBBTreeInt> bbbtree_int = std::make_unique<BBBTreeInt>(
 		TEST_SEGMENT_ID, *buffer_manager, TEST_WA_THRESHOLD);
 
-	const size_t tuples_per_leaf =
-		(page_size - sizeof(BTreeInt::LeafNode)) /
-		(sizeof(UInt64) + sizeof(TID) + sizeof(BTreeInt::LeafNode::Slot));
+	const size_t tuples_per_leaf = 4;
 
 	// Fill up the single node.
 	size_t i = 1;
-	for (; i < tuples_per_leaf; i++) {
+	for (; i <= tuples_per_leaf; i++) {
 		EXPECT_TRUE(bbbtree_int->insert(i, i + 2));
 		EXPECT_TRUE(bbbtree_int->lookup(i).has_value());
 		EXPECT_EQ(bbbtree_int->lookup(i), i + 2);
@@ -315,7 +314,7 @@ TEST_F(BBBTreeTest, LeafSplitsInDeltaTree) {
 		auto *node1 = reinterpret_cast<BTreeInt::LeafNode *>(frame1.get_data());
 		// Node 1 does not have its node split on disk. So all keys are still
 		// present.
-		EXPECT_EQ(node1->slot_count, tuples_per_leaf - 1);
+		EXPECT_EQ(node1->slot_count, tuples_per_leaf);
 		for (size_t j = 1; j < tuples_per_leaf; j++) {
 			EXPECT_TRUE(bbbtree_int->lookup(j).has_value());
 			EXPECT_EQ(bbbtree_int->lookup(j), j + 2);
@@ -351,14 +350,12 @@ TEST_F(BBBTreeTest, SplitAndInserts) {
 	std::unique_ptr<TestBBBTree> bbbtree_int =
 		std::make_unique<TestBBBTree>(TEST_SEGMENT_ID, *buffer_manager);
 
-	size_t tuples_per_leaf =
-		(page_size - sizeof(BTreeInt::LeafNode)) /
-		(sizeof(UInt64) + sizeof(TID) + sizeof(BTreeInt::LeafNode::Slot));
+	size_t tuples_per_leaf = 4;
 
 	// Fill up the single node.
 	std::vector<size_t> inserted;
 	size_t i = 1;
-	for (; i < tuples_per_leaf; i++) {
+	for (; i <= tuples_per_leaf; ++i) {
 		EXPECT_TRUE(bbbtree_int->insert(i, i + 2));
 		EXPECT_TRUE(bbbtree_int->lookup(i).has_value());
 		EXPECT_EQ(bbbtree_int->lookup(i), i + 2);
@@ -411,7 +408,7 @@ TEST_F(BBBTreeTest, SplitAndInserts) {
 		auto *node1 = reinterpret_cast<BTreeInt::LeafNode *>(frame1.get_data());
 		// Node 1 does not have its node split on disk. So all keys are still
 		// present.
-		EXPECT_EQ(node1->slot_count, 3);
+		EXPECT_EQ(node1->slot_count, 4);
 		EXPECT_FALSE(node1->lookup(UInt64{0}).has_value());
 		EXPECT_TRUE(node1->lookup(UInt64{1}).has_value());
 		EXPECT_TRUE(node1->lookup(UInt64{2}).has_value());
