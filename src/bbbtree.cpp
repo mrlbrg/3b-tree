@@ -188,7 +188,6 @@ void DeltaTree<KeyT, ValueT>::apply_deltas(NodeT *node, const DeltasT &deltas,
 		case OperationType::Updated:
 			node->update(key, value);
 			break;
-		case OperationType::Deleted:
 		default:
 			throw std::logic_error("DeltaTree::after_load(): "
 								   "Operation Type not implemented "
@@ -200,7 +199,6 @@ void DeltaTree<KeyT, ValueT>::apply_deltas(NodeT *node, const DeltasT &deltas,
 	assert(!deltas.empty() || node->slot_count != slot_count);
 
 	// Analyze delta stream to determine cut-off point.
-	// TODO: When implementing deletes, they should be applied here.
 	auto cut_off = slot_count;
 	for (size_t i = 0; i < deltas.size(); ++i) {
 		auto &[entry, op] = deltas[i];
