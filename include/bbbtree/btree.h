@@ -537,6 +537,8 @@ struct BTree : public Segment {
 	/// Returns the next free page ID.
 	PageID get_new_page();
 
+	size_t get_average_num_entries_per_node();
+
 	/// Prints the tree.
 	friend std::ostream &
 	operator<< <>(std::ostream &, const BTree<KeyT, ValueT, UseDeltaTree> &);

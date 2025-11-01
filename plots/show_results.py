@@ -1,6 +1,6 @@
 import json
 
-with open("plots/pageviews_results.json") as f:
+with open("plots/pageviews_mixed_buffer_sizes.json") as f:
     data = json.load(f)
 
 benchmarks = data["benchmarks"]

@@ -28,8 +28,8 @@ def base_name(name):
     for idx_type in [
         "<BTreeIndex>",
         "<BBBTreeIndex>",
-        "<BTreeIndexVar>",
-        "<BBBTreeIndexVar>",
+        # "<BTreeIndexVar>",
+        # "<BBBTreeIndexVar>",
     ]:
         name = name.replace(idx_type, "")
     return name
@@ -138,14 +138,14 @@ bbbtree_bars2 = ax.bar(
 )
 
 ax.set_xticks(x)
-ax.set_xticklabels(
-    [
-        "uint64_t",
-        "variable-sized string with 5% write threshold",
-        "variable-sized string with 6% write threshold",
-    ],
-    fontsize=12,
-)  # <-- Set your labels here
+# ax.set_xticklabels(
+#     [
+#         "uint64_t",
+#         "variable-sized string with 5% write threshold",
+#         "variable-sized string with 6% write threshold",
+#     ],
+#     fontsize=12,
+# )  # <-- Set your labels here
 # ax.set_xticklabels(x_labels, fontsize=12)
 ax.set_ylabel("Number of Page I/Os", fontsize=16)
 ax.set_xlabel("Key Type", fontsize=16)

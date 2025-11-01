@@ -6,19 +6,19 @@ import os
 cwd = os.getcwd()
 
 # Load benchmark results
-with open(os.path.join(cwd, "plots", "pageviews_results.json")) as f:
+with open(os.path.join(cwd, "plots", "pageviews_insert_write_thresholds.json")) as f:
     data = json.load(f)
 
 benchmarks = data["benchmarks"]
 
-write_thresholds = [0, 1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+write_thresholds = [0, 1, 5, 10, 20, 30, 40, 50]
 
 btree_benchmarks = [
-    f"BM_PageViews_Insert_Index<BTreeIndex>/300/4096/{threshold}/iterations:1/repeats:1"
+    f"BM_PageViews_Insert_Index<BTreeIndex>/200/4096/{threshold}/iterations:1/repeats:1"
     for threshold in write_thresholds
 ]
 bbbtree_benchmarks = [
-    f"BM_PageViews_Insert_Index<BBBTreeIndex>/300/4096/{threshold}/iterations:1/repeats:1"
+    f"BM_PageViews_Insert_Index<BBBTreeIndex>/200/4096/{threshold}/iterations:1/repeats:1"
     for threshold in write_thresholds
 ]
 
@@ -46,17 +46,16 @@ ax.plot(
     improvements,
     marker="o",
     color="#E69F00",
-    label="% Improvement in BBB-Tree",
+    label="3B-tree",
 )
-ax.axhline(
-    0, color="#0072B2", linestyle="--", linewidth=1, label="Page Writes in B-Tree"
-)
-ax.set_xticks(list(range(0, 101, 10)))
-ax.set_xlabel("Write Threshold (%)", fontsize=14)
-ax.set_ylabel("% Fewer Pages Written", fontsize=14)
-ax.set_title("Write Amplification across Write Thresholds", fontsize=16)
+ax.axhline(0, color="#0072B2", linestyle="--", linewidth=1, label="B-tree")
+# ax.set_xticks(list(range(0, 101, 10)))
+ax.tick_params(axis="both", which="major", labelsize=14)
+ax.set_xlabel("Write Threshold (%)", fontsize=16)
+ax.set_ylabel("Page Write Reduction Over B-tree (%)", fontsize=16)
+ax.set_title("Reduction in Page Writes across Write Thresholds", fontsize=16)
 ax.set_ylim(top=100)
-ax.legend(fontsize=12)
+ax.legend(fontsize=14)
 plt.tight_layout()
 plt.savefig(os.path.join(cwd, "plots", "pageviews_write_thresholds_improvement.png"))
 plt.close()

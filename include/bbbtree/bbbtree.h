@@ -126,6 +126,10 @@ class BBBTree {
 		stats.delta_tree_height = delta_tree.height();
 	}
 
+	size_t get_average_num_entries_per_node() {
+		return btree.get_average_num_entries_per_node();
+	}
+
 	/// Clears the trees.
 	void clear() {
 		btree.clear();

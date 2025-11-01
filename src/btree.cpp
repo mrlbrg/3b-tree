@@ -348,6 +348,71 @@ void BTree<KeyT, ValueT, UseDeltaTree>::split(const KeyT &key,
 }
 // -----------------------------------------------------------------
 template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
+size_t BTree<KeyT, ValueT, UseDeltaTree>::get_average_num_entries_per_node() {
+	// Acquire root to get height of tree.
+	auto &root_frame = buffer_manager.fix_page(segment_id, root, false,
+											   page_logic, is_delta_tree);
+	auto *node = reinterpret_cast<
+		typename BTree<KeyT, ValueT, UseDeltaTree>::InnerNode *>(
+		root_frame.get_data());
+	auto level = node->level;
+	buffer_manager.unfix_page(root_frame, false);
+
+	// Traverse each level of nodes.
+	std::vector<PageID> nodes_on_current_level{root};
+	size_t total_entries = 0;
+	size_t total_nodes = 0;
+	while (level > 0) {
+		// Collect children.
+		std::vector<PageID> children{};
+		for (auto pid : nodes_on_current_level) {
+			// Acquire page.
+			auto &frame = buffer_manager.fix_page(segment_id, pid, false,
+												  page_logic, is_delta_tree);
+			auto *node = reinterpret_cast<
+				typename BTree<KeyT, ValueT, UseDeltaTree>::InnerNode *>(
+				frame.get_data());
+
+			// Sanity Check.
+			assert(node->level == level);
+			assert(node->get_upper());
+
+			total_entries += node->slot_count;
+			++total_nodes;
+
+			// Collect children
+			for (auto child : node->get_children()) {
+				children.push_back(child);
+			}
+			children.push_back(node->get_upper());
+
+			// Release page.
+			buffer_manager.unfix_page(frame, false);
+		}
+		nodes_on_current_level = children;
+		--level;
+	}
+
+	// Traverse leaf level
+	for (auto pid : nodes_on_current_level) {
+		auto &frame = buffer_manager.fix_page(segment_id, pid, false,
+											  page_logic, is_delta_tree);
+		auto &leaf = *reinterpret_cast<
+			typename BTree<KeyT, ValueT, UseDeltaTree>::LeafNode *>(
+			frame.get_data());
+		// Sanity Check.
+		assert(leaf.level == level);
+
+		total_entries += leaf.slot_count;
+		++total_nodes;
+
+		buffer_manager.unfix_page(frame, false);
+	}
+
+	return total_entries / total_nodes;
+}
+// -----------------------------------------------------------------
+template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 std::ostream &operator<<(std::ostream &os,
 						 const BTree<KeyT, ValueT, UseDeltaTree> &type) {
 
@@ -504,7 +569,7 @@ template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 const KeyT BTree<KeyT, ValueT, UseDeltaTree>::LeafNode::LeafSlot::get_key(
 	const std::byte *begin) const {
 	assert(key_size);
-	assert(offset);
+	assert(state_and_offset.get_offset());
 	return KeyT::deserialize(begin + get_offset(), key_size);
 }
 // -----------------------------------------------------------------
@@ -512,7 +577,7 @@ template <KeyIndexable KeyT, ValueIndexable ValueT, bool UseDeltaTree>
 const KeyT BTree<KeyT, ValueT, UseDeltaTree>::InnerNode::Pivot::get_key(
 	const std::byte *begin) const {
 	assert(key_size);
-	assert(offset);
+	assert(state_and_offset.get_offset());
 	return KeyT::deserialize(begin + get_offset(), key_size);
 }
 // -----------------------------------------------------------------

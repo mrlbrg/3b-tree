@@ -12,14 +12,14 @@ with open(os.path.join(cwd, "plots", "pageviews_results.json")) as f:
 
 benchmarks = data["benchmarks"]
 
-write_thresholds = [0, 1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+write_thresholds = [0, 1, 5, 10, 20, 30, 40, 50]
 
 btree_benchmarks = [
-    f"BM_PageViews_Mixed_Index<BTreeIndex>/500/4096/{threshold}/iterations:1/repeats:1"
+    f"BM_PageViews_Mixed_Index<BTreeIndex>/400/4096/{threshold}/5/iterations:1/repeats:1"
     for threshold in write_thresholds
 ]
 bbbtree_benchmarks = [
-    f"BM_PageViews_Mixed_Index<BBBTreeIndex>/500/4096/{threshold}/iterations:1/repeats:1"
+    f"BM_PageViews_Mixed_Index<BBBTreeIndex>/400/4096/{threshold}/5/iterations:1/repeats:1"
     for threshold in write_thresholds
 ]
 

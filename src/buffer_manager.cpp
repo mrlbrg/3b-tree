@@ -128,7 +128,7 @@ BufferFrame &BufferManager::fix_page(SegmentID segment_id, PageID page_id,
 		//  TODO: Already used by someone else?
 		auto &frame = frame_it->second;
 		++(frame->in_use_by);
-		assert(frame.is_delta_tree == is_delta_tree);
+		assert(frame->is_delta_tree == is_delta_tree);
 #ifndef NDEBUG
 		logger.log("Page already in buffer.");
 		--logger;
